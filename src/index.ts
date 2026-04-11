@@ -102,6 +102,9 @@ export { StreamingToolExecutor } from './engine/StreamingToolExecutor.js'
 export { runCoordinatorMode, isCoordinatorMode, buildTaskNotification } from './engine/coordinator/coordinatorMode.js'
 export { getCoordinatorSystemPrompt, getCoordinatorUserContext } from './engine/coordinator/coordinatorPrompt.js'
 
+// Port manager
+export { findAvailablePort, isPortFree, readServerLock, writeServerLock, clearServerLock } from './utils/portManager.js'
+
 // Utils
 export { estimateCost, formatCost, formatTokens } from './utils/cost.js'
 export { createUserMessage, createAssistantMessage, normalizeMessagesForAPI, extractTextContent } from './utils/messages.js'

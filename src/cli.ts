@@ -43,6 +43,7 @@ import { claudeMdProvider } from './context/providers/claudemd.js'
 import { memoryProvider } from './context/providers/memory.js'
 import { gitContextProvider } from './context/providers/gitContext.js'
 import { withRetry, withFallback } from './api/retry.js'
+import { findAvailablePort, readServerLock, writeServerLock, registerLockCleanup } from './utils/portManager.js'
 import { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
 import { resolveApiConfig, loadSettings, persistPermissionRules, showConfig, saveApiConfig } from './utils/config.js'
 import { apiCompact } from './compact/apiCompact.js'
@@ -315,20 +316,50 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     const agentToolForServer = createAgentTool(apiClient, allBaseToolsForServer, contextProviders, async () => ({ behavior: 'allow' as const }))
     const allToolsForServer: Tool[] = [...allBaseToolsForServer, toolSearchForServer, agentToolForServer]
 
-    const port = parseInt((options.port as string) || process.env.PORT || '3001', 10)
+    const requestedPort = parseInt((options.port as string) || process.env.PORT || '3001', 10)
     const host = (options.host as string) || process.env.HOST || 'localhost'
-    // --tui 时 CORS 允许同端口（内嵌静态文件），否则允许指定或默认 3002
-    const corsOrigin = (options.corsOrigin as string) || process.env.CORS_ORIGIN
-      || (isTui ? `http://${host}:${port}` : 'http://localhost:3002')
 
-    // 静态文件目录：优先 web-dist/（npm run build:web 生成），其次 ../mini-claude-web/out
+    // ── 检查当前 workspace 是否已有实例在运行 ──
+    const existingLock = await readServerLock(cwd)
+    if (existingLock) {
+      const url = `http://${existingLock.host}:${existingLock.port}`
+      console.log(chalk.yellow(
+        `⚡ mini-claude server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
+      ))
+      if (isTui) {
+        console.log(chalk.cyan(`🌐 Opening browser: ${url}`))
+        await openBrowser(url)
+      } else {
+        console.log(chalk.dim(`API: ${url}/api`))
+      }
+      return  // 不重复启动
+    }
+
+    // ── 自动探测可用端口 ──
+    let port: number
+    try {
+      port = await findAvailablePort(requestedPort, host)
+      if (port !== requestedPort) {
+        console.log(chalk.yellow(
+          `⚠ Port ${requestedPort} is in use — using port ${port} instead`
+        ))
+      }
+    } catch (portErr) {
+      console.error(chalk.red((portErr as Error).message))
+      process.exit(1)
+    }
+
+    const corsOrigin = (options.corsOrigin as string) || process.env.CORS_ORIGIN
+      || (isTui ? `http://${host}:${port}` : `http://${host}:3002`)
+
+    // 静态文件目录
     const { resolve: resolvePath } = await import('node:path')
     const { fileURLToPath: fu } = await import('node:url')
     const __dir = resolvePath(fu(import.meta.url), '..')
     const { statSync } = await import('node:fs')
     const webDist = [
-      resolvePath(__dir, '..', 'web-dist'),     // 已构建：npm run build:web
-      resolvePath(__dir, '..', 'ui', 'out'),    // 开发期 next export（ui/ 子项目）
+      resolvePath(__dir, '..', 'web-dist'),
+      resolvePath(__dir, '..', 'ui', 'out'),
     ].find(p => { try { statSync(p); return true } catch { return false } })
 
     const server = createMiniClaudeServer({
@@ -339,8 +370,12 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       mcpManager,
       cwd,
       defaultModel: model,
-      webDistPath: webDist,  // 静态文件目录（可 undefined）
+      webDistPath: webDist,
     })
+
+    // 写入 workspace 锁文件，注册退出清理
+    await writeServerLock(cwd, port, host)
+    registerLockCleanup(cwd)
 
     process.on('SIGINT', async () => {
       console.log('\nShutting down...')
