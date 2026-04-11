@@ -115,6 +115,20 @@ export function createWebSearchTool(
     },
 
     mapToolResultToToolResultBlockParam(output, toolUseID) {
+      // 检测是否是失败/不支持的情况
+      const isFailure = output.results.length === 1 &&
+        typeof output.results[0] === 'string' &&
+        (output.results[0] as string).startsWith('[WebSearch failed]')
+
+      if (isFailure) {
+        return {
+          tool_use_id: toolUseID,
+          type: 'tool_result',
+          content: output.results[0] as string,
+          is_error: true,
+        }
+      }
+
       const header = `Web search results for: "${output.query}" (via ${output.provider}, ${output.durationSeconds.toFixed(1)}s)\n\n`
 
       const body = output.results.map(r => {
@@ -125,7 +139,7 @@ export function createWebSearchTool(
       return {
         tool_use_id: toolUseID,
         type: 'tool_result',
-        content: header + body + '\n\nREMINDER: Include sources as markdown hyperlinks in your response.',
+        content: header + body + '\n\nREMINDER: Only present the above real search results. Do NOT add, infer, or generate any content not found in these results.',
       }
     },
   }
@@ -172,14 +186,13 @@ async function searchWithAnthropic(
     )
 
     const results: (SearchResult | string)[] = []
-    let textAcc = ''
+    let hasRealSearchResults = false  // 是否拿到了真实的 web_search_tool_result block
 
     for (const block of response.content) {
       const b = block as unknown as Record<string, unknown>
 
-      if (b.type === 'text') {
-        textAcc += b.text as string
-      } else if (b.type === 'web_search_tool_result') {
+      if (b.type === 'web_search_tool_result') {
+        hasRealSearchResults = true
         const content = b.content
         if (Array.isArray(content)) {
           for (const item of content as Array<Record<string, unknown>>) {
@@ -197,14 +210,32 @@ async function searchWithAnthropic(
           results.push(`Search error: ${(content as Record<string, unknown>).error_code}`)
         }
       }
-    }
-
-    // 把 AI 生成的摘要文本也加进来
-    if (textAcc.trim()) {
-      results.push(textAcc.trim())
+      // 注意：有意忽略 text block（AI 生成的摘要文字）
+      // 因为当中转接口不支持 web_search beta 功能时，模型会直接生成幻觉内容
+      // 只有当有真实的 web_search_tool_result block 时才信任文字摘要
     }
 
     const durationSeconds = (performance.now() - startTime) / 1000
+
+    // ── 关键检查：没有拿到真实搜索结果 ──
+    // 说明当前接口/模型不支持 web_search_20250305 beta 功能（如中转接口）
+    // 返回明确的失败消息，防止上层 Agent 使用幻觉内容
+    if (!hasRealSearchResults) {
+      return {
+        data: {
+          query: input.query,
+          results: [
+            `[WebSearch failed] The current API endpoint does not support the web_search_20250305 feature. ` +
+            `No real search was performed. To get real search results, either:\n` +
+            `1. Use the official Anthropic API (api.anthropic.com)\n` +
+            `2. Configure TAVILY_API_KEY in settings for fallback search\n` +
+            `DO NOT generate or guess news content based on this query.`,
+          ],
+          durationSeconds,
+          provider: 'anthropic',
+        },
+      }
+    }
 
     return {
       data: {
@@ -217,11 +248,15 @@ async function searchWithAnthropic(
   } catch (err) {
     const msg = (err as Error).message
     // 模型不支持 web search 时给出友好提示
-    if (msg.includes('web_search') || msg.includes('beta')) {
+    if (msg.includes('web_search') || msg.includes('beta') || msg.includes('not_found')) {
       return {
         data: {
           query: input.query,
-          results: [`Web search not supported by current model/endpoint. Error: ${msg}`],
+          results: [
+            `[WebSearch failed] This API endpoint does not support the Anthropic web search feature. ` +
+            `Error: ${msg}\n` +
+            `DO NOT fabricate or generate search results.`,
+          ],
           durationSeconds: 0,
           provider: 'anthropic',
         },
