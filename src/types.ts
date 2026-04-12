@@ -241,6 +241,12 @@ export interface Settings {
   }
   /** Logger instance for structured logging */
   logger?: unknown
+  /**
+   * 开发模式 trace：启用后将完整会话事件流（消息、工具调用、token 用量等）
+   * 写入 ~/.mini-claude/projects/<hash>/<sessionId>.trace.jsonl，用于评测与迭代。
+   * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
+   */
+  devTrace?: boolean
 }
 
 export interface MCPServerConfig {
@@ -277,6 +283,11 @@ export interface SessionState {
   lastSummarizedMessageId?: string
   /** autoCompact 触发追踪（记录 snip 已释放 token 量，避免重复触发） */
   autoCompactTracking?: { snipTokensFreed: number; lastCompactTurn: number }
+  /**
+   * 最后一次 API 调用实际返回的 inputTokens（来自 usage 字段）。
+   * 用于 tokenCountWithEstimation：比字符估算更准确的上下文大小基准。
+   */
+  lastTurnInputTokens: number
 
   model: string
   fallbackModel?: string

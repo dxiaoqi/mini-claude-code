@@ -49,6 +49,7 @@ export function createSessionState(options: {
     model: options.settings?.model || 'gpt-4o',
     fallbackModel: options.settings?.fallbackModel,
     settings: options.settings || {},
+    lastTurnInputTokens: 0,
   }
 }
 

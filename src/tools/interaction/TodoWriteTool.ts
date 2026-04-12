@@ -27,6 +27,12 @@ interface Output {
 
 let currentTodos: TodoItem[] = []
 
+/** 连续调用节流：记录最近一次 call 的时间戳，同一 turn 内连续调用超限时静默忽略 */
+let lastCallMs = 0
+let callCountInWindow = 0
+const THROTTLE_WINDOW_MS = 2000   // 2 秒内
+const MAX_CALLS_IN_WINDOW = 2     // 最多允许 2 次（初始化 + 1 次批量更新）
+
 export const TodoWriteTool: Tool<Input, Output> = {
   name: 'TodoWrite',
   aliases: ['TodoWriteTool'],
@@ -42,6 +48,21 @@ export const TodoWriteTool: Tool<Input, Output> = {
   },
 
   async call(input): Promise<ToolResult<Output>> {
+    // 节流：同一时间窗口内调用超过阈值，静默返回当前状态（不修改、不报错）
+    const now = Date.now()
+    if (now - lastCallMs > THROTTLE_WINDOW_MS) {
+      callCountInWindow = 0
+    }
+    callCountInWindow++
+    lastCallMs = now
+
+    if (callCountInWindow > MAX_CALLS_IN_WINDOW) {
+      // 静默跳过：返回当前状态，不修改列表，不向 agent 暴露错误
+      return {
+        data: { todos: currentTodos, count: currentTodos.length },
+      }
+    }
+
     if (input.merge) {
       const idMap = new Map(currentTodos.map(t => [t.id, t]))
       for (const todo of input.todos) {
@@ -94,4 +115,6 @@ export function getCurrentTodos(): readonly TodoItem[] {
 
 export function clearTodos(): void {
   currentTodos = []
+  lastCallMs = 0
+  callCountInWindow = 0
 }

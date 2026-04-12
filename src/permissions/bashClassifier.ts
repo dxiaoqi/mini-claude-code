@@ -120,8 +120,10 @@ function classifySingleCommand(command: string): ClassificationResult {
   }
 
   // Check safe read
+  // 使用精确前缀匹配：command 必须等于 prefix 或以 "prefix + 空格" 开头，
+  // 避免 "npm --version" 首词 "npm" 误匹配 "npm install" 等写操作。
   for (const prefix of SAFE_READ_PREFIXES) {
-    if (command.startsWith(prefix) || command.startsWith(prefix.split(' ')[0] + ' ')) {
+    if (command === prefix || command.startsWith(prefix + ' ')) {
       // Extra check: read commands with pipe to destructive commands
       if (/\|\s*(rm|dd|mkfs)/.test(command)) {
         return { risk: 'needs_confirmation', reason: 'Read piped to destructive command' }
@@ -132,7 +134,7 @@ function classifySingleCommand(command: string): ClassificationResult {
 
   // Check safe write
   for (const prefix of SAFE_WRITE_PREFIXES) {
-    if (command.startsWith(prefix) || command.startsWith(prefix.split(' ')[0] + ' ')) {
+    if (command === prefix || command.startsWith(prefix + ' ')) {
       return { risk: 'safe_write', reason: `Matches safe write pattern: ${prefix}` }
     }
   }

@@ -98,7 +98,11 @@ function getToolUseSection(enabledToolNames: string[]): string {
     `  - Reserve Bash for system commands that require shell execution`,
     `You can call multiple tools in a single response. If there are no dependencies between calls, make them in parallel for efficiency. But if calls depend on each other, make them sequentially.`,
     enabledToolNames.includes('TodoWrite')
-      ? `Use TodoWrite to break down and track multi-step tasks. Mark each task complete as soon as it's done.`
+      ? `Use TodoWrite proactively to plan and track complex multi-step tasks (3+ distinct steps). Follow these rules:
+  - Call it ONCE at the start to lay out the plan (merge: false).
+  - Batch status updates: update multiple todos in a single call (merge: true) rather than calling it after every individual action.
+  - Only update when a meaningful group of work is complete, not after every file write or command.
+  - Do NOT call TodoWrite for single-step tasks or tasks already in progress.`
       : null,
     enabledToolNames.includes('Agent')
       ? `Use Agent for parallelizable subtasks or to protect the main context from excessive results. Don't duplicate work that agents are already doing.`

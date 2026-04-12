@@ -213,6 +213,10 @@ export async function* agentLoop(
             currentUsage = event.usage
             stopReason = event.stopReason
             accumulateUsage(state, event.usage, currentModel)
+            // 记录本轮实际 inputTokens，供下轮 summaryCompact 做精确阈值判断
+            if (event.usage.inputTokens > 0) {
+              state.lastTurnInputTokens = event.usage.inputTokens
+            }
             break
           case 'error':
             return { reason: 'error', turnCount }

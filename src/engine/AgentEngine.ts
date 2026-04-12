@@ -26,6 +26,7 @@ import { checkToolPermission } from '../permissions/engine.js'
 import { recordDenial } from '../permissions/engine.js'
 import { dateContextProvider } from '../context/providers/dateContext.js'
 import { recordTranscript } from '../state/transcript.js'
+import { DevTraceRecorder } from '../state/devTrace.js'
 
 export interface AgentEngineConfig {
   apiClient: APIClient
@@ -37,6 +38,8 @@ export interface AgentEngineConfig {
   askUser?: (question: string, options?: Array<{ id: string; label: string }>) => Promise<string>
   /** MCP 资源工具使用 */
   mcpManager?: { getAllConnections(): unknown[] }
+  /** Dev Trace 记录器（--dev 模式或 settings.devTrace: true 时注入） */
+  devTraceRecorder?: DevTraceRecorder
 }
 
 /**
@@ -128,6 +131,13 @@ export async function runAgentLoop(
 
   let result: AgentLoopResult = { reason: 'completed', turnCount: 0 }
 
+  // Dev trace 状态追踪
+  const devTrace = config.devTraceRecorder
+  const toolCallStartTimes = new Map<string, number>()
+  let turnStartTime = Date.now()
+  let currentTurn = 0
+  let textBuffer = ''
+
   for (;;) {
     const iterResult = await loop.next()
     if (iterResult.done) {
@@ -137,6 +147,69 @@ export async function runAgentLoop(
 
     const event = iterResult.value
     config.adapter.onStreamEvent(event)
+
+    // ── Dev trace 事件记录 ──────────────────────────────────────────────────
+    if (devTrace) {
+      if (event.type === 'message_start') {
+        currentTurn++
+        turnStartTime = Date.now()
+        textBuffer = ''
+        await devTrace.record({
+          type: 'turn_start',
+          turn: currentTurn,
+          timestamp: new Date().toISOString(),
+        })
+      } else if (event.type === 'text_delta') {
+        textBuffer += event.text
+      } else if (event.type === 'tool_use_start') {
+        if (textBuffer) {
+          await devTrace.record({ type: 'text', turn: currentTurn, text: textBuffer })
+          textBuffer = ''
+        }
+        toolCallStartTimes.set(event.id, Date.now())
+        await devTrace.record({
+          type: 'tool_call',
+          turn: currentTurn,
+          name: event.name,
+          toolUseId: event.id,
+          input: event.input,
+          startedAt: new Date().toISOString(),
+        })
+      } else if (event.type === 'tool_result') {
+        const startMs = toolCallStartTimes.get(event.toolUseId) ?? Date.now()
+        toolCallStartTimes.delete(event.toolUseId)
+        await devTrace.record({
+          type: 'tool_result',
+          turn: currentTurn,
+          name: event.toolName,
+          toolUseId: event.toolUseId,
+          output: event.result,
+          durationMs: Date.now() - startMs,
+          isError: event.isError ?? false,
+        })
+      } else if (event.type === 'turn_complete') {
+        if (textBuffer) {
+          await devTrace.record({ type: 'text', turn: currentTurn, text: textBuffer })
+          textBuffer = ''
+        }
+        await devTrace.record({
+          type: 'turn_end',
+          turn: event.turnCount,
+          inputTokens: event.usage.inputTokens,
+          outputTokens: event.usage.outputTokens,
+          durationMs: Date.now() - turnStartTime,
+          timestamp: new Date().toISOString(),
+        })
+      } else if (event.type === 'error') {
+        await devTrace.record({
+          type: 'error',
+          turn: currentTurn,
+          message: event.error.message,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     if (event.type === 'tool_use_start') {
       config.adapter.onToolStart(event.name, event.input)

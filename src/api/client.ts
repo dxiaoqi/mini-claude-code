@@ -54,12 +54,14 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
                   },
                 })
               } else if (block.type === 'tool_result') {
+                const toolContent = typeof block.content === 'string'
+                  ? block.content
+                  : block.content.map(b => 'text' in b ? b.text : '').join('\n')
                 messages.push({
                   role: 'tool',
                   tool_call_id: block.tool_use_id,
-                  content: typeof block.content === 'string'
-                    ? block.content
-                    : block.content.map(b => 'text' in b ? b.text : '').join('\n'),
+                  // 部分厂商不接受空字符串内容，用占位符兜底
+                  content: toolContent || '(empty)',
                 })
                 continue
               }
@@ -95,18 +97,24 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
             if (toolCalls.length > 0) {
               messages.push({
                 role: 'assistant',
-                content: textParts.join('\n') || null,
+                // 部分兼容厂商（如字节 Doubao）不接受 content: null，使用空字符串兜底
+                content: textParts.join('\n') || '',
                 tool_calls: toolCalls as OpenAI.Chat.ChatCompletionMessageToolCall[],
               })
             } else {
               messages.push({
                 role: 'assistant',
-                content: textParts.join('\n') || null,
+                content: textParts.join('\n') || '',
               })
             }
           }
         }
       }
+
+      // 修复 compaction 后可能产生的非法消息序列：
+      //   1. 移除孤立的 tool 消息（无对应 assistant tool_call）
+      //   2. 确保第一条非 system 消息是 user（Doubao 等厂商严格要求）
+      const repairedMessages = repairMessageSequence(messages)
 
       const tools: OpenAI.Chat.ChatCompletionTool[] | undefined =
         params.tools.length > 0
@@ -123,7 +131,7 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
       const stream = await openai.chat.completions.create(
         {
           model: params.model || config.defaultModel || 'gpt-4o',
-          messages,
+          messages: repairedMessages,
           tools,
           stream: true,
           max_tokens: params.maxOutputTokens,
@@ -216,4 +224,55 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
       yield { type: 'message_end', usage: totalUsage, stopReason }
     },
   }
+}
+
+/**
+ * 修复 compaction 后产生的非法 OpenAI 消息序列：
+ *
+ * 问题根源：snipCompact 在 assistant 消息处裁切，导致：
+ *   1. 孤立的 tool 消息（role:'tool' 但无对应 assistant tool_call）
+ *   2. 第一条非 system 消息是 assistant（Doubao 等严格厂商要求先有 user）
+ *
+ * 修复策略：
+ *   - 移除无对应 tool_call 的孤立 tool 消息
+ *   - 若第一条非 system 消息不是 user，插入占位 user 消息
+ */
+function repairMessageSequence(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const result: OpenAI.Chat.ChatCompletionMessageParam[] = []
+  const activeToolCallIds = new Set<string>()
+
+  for (const msg of messages) {
+    if (msg.role === 'assistant') {
+      activeToolCallIds.clear()
+      if ('tool_calls' in msg && msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          activeToolCallIds.add(tc.id)
+        }
+      }
+      result.push(msg)
+    } else if (msg.role === 'tool') {
+      // 只保留有对应 assistant tool_call 的 tool 消息，丢弃孤立的
+      if (msg.tool_call_id && activeToolCallIds.has(msg.tool_call_id)) {
+        activeToolCallIds.delete(msg.tool_call_id)
+        result.push(msg)
+      }
+      // 孤立 tool 消息静默丢弃
+    } else {
+      activeToolCallIds.clear()
+      result.push(msg)
+    }
+  }
+
+  // 确保第一条非 system 消息是 user
+  const firstNonSystemIdx = result.findIndex(m => m.role !== 'system')
+  if (firstNonSystemIdx >= 0 && result[firstNonSystemIdx].role !== 'user') {
+    result.splice(firstNonSystemIdx, 0, {
+      role: 'user',
+      content: '[Context continues from earlier conversation]',
+    })
+  }
+
+  return result
 }

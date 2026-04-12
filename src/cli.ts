@@ -42,6 +42,7 @@ import { loadMCPConfigs } from './mcp/config.js'
 import { claudeMdProvider } from './context/providers/claudemd.js'
 import { memoryProvider } from './context/providers/memory.js'
 import { gitContextProvider } from './context/providers/gitContext.js'
+import { sessionMemoryProvider } from './context/providers/sessionMemoryProvider.js'
 import { withRetry, withFallback } from './api/retry.js'
 import { findAvailablePort, readServerLock, writeServerLock, registerLockCleanup } from './utils/portManager.js'
 import { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
@@ -49,6 +50,7 @@ import { resolveApiConfig, loadSettings, persistPermissionRules, showConfig, sav
 import { apiCompact } from './compact/apiCompact.js'
 import { estimateMessagesTokens } from './compact/tokenEstimator.js'
 import { flushTranscript } from './state/transcript.js'
+import { DevTraceRecorder } from './state/devTrace.js'
 import { restoreSnapshot, listSnapshotFiles, clearSnapshots } from './state/fileHistory.js'
 import { clearSnipArchive, restoreLastSnip, getArchivedMessageCount } from './compact/snipCompact.js'
 import { formatCost, formatTokens, estimateCost } from './utils/cost.js'
@@ -59,9 +61,12 @@ import chalk from 'chalk'
 const VERSION = '0.1.0'
 
 // Initialize logger
+// 交互式终端（TTY）下默认 warn，避免 INFO 结构化日志污染 CLI 输出；
+// 需要详细日志时可通过 LOG_LEVEL=info/debug 环境变量覆盖。
+const defaultLogLevel = process.stdout.isTTY ? 'warn' : 'info'
 const logger = createLogger({
   name: 'mini-claude-cli',
-  level: (process.env.LOG_LEVEL as any) || 'info',
+  level: (process.env.LOG_LEVEL as any) || defaultLogLevel,
   pretty: process.stdout.isTTY,
   development: process.env.NODE_ENV !== 'production',
 })
@@ -86,6 +91,7 @@ program
   .option('--host <host>', 'HTTP server host (default: localhost)')
   .option('--cors-origin <origin>', 'CORS allowed origin for web UI')
   .option('--config', 'Show current effective configuration')
+  .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.mini-claude/projects/<hash>/<sessionId>.trace.jsonl')
   .argument('[prompt]', 'Initial prompt (or pipe via stdin with -p)')
 
 program.action(async (prompt: string | undefined, options: Record<string, unknown>) => {
@@ -147,6 +153,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
   // Wrap with retry + fallback
   const fileSettings = await loadSettings(cwd).catch(() => ({} as Settings))
+  const isDevMode = (options.dev as boolean) || (fileSettings.devTrace === true)
   const fallbackModel = cfgFallbackModel || fileSettings.fallbackModel || process.env.FALLBACK_MODEL
 
   const retriedClient = withRetry(baseClient, { maxRetries: 2 })
@@ -170,6 +177,20 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     model,
     permissionMode: state.permissionMode,
   })
+
+  // ── Dev Trace 初始化 ──────────────────────────────────────────────────────
+  let devTraceRecorder: DevTraceRecorder | undefined
+  if (isDevMode) {
+    devTraceRecorder = new DevTraceRecorder(state.projectRoot, state.sessionId)
+    await devTraceRecorder.record({
+      type: 'session_start',
+      sessionId: state.sessionId,
+      model: state.model,
+      cwd: state.cwd,
+      timestamp: new Date().toISOString(),
+    })
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Core tools (always loaded)
   const coreTools: Tool[] = [
@@ -227,6 +248,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     claudeMdProvider,
     memoryProvider,
     gitContextProvider,
+    sessionMemoryProvider,
   ]
 
   // 组装完整工具列表
@@ -288,7 +310,19 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       tools,
       adapter,
       contextProviders,
+      devTraceRecorder,
     }, pipeFinalContent)
+
+    if (devTraceRecorder) {
+      await devTraceRecorder.record({
+        type: 'session_end',
+        reason: 'completed',
+        totalTurns: state.messages.filter(m => m.role === 'assistant').length,
+        totalInputTokens: state.totalInputTokens,
+        totalOutputTokens: state.totalOutputTokens,
+        timestamp: new Date().toISOString(),
+      })
+    }
 
     process.exit(0)
   }
@@ -451,6 +485,9 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝'))
   console.log(chalk.dim(`Provider: ${providerType} | Model: ${model}${useCoordinator ? ' | Mode: Coordinator' : ''}`))
   console.log(chalk.dim(`CWD: ${process.cwd()}`))
+  if (devTraceRecorder) {
+    console.log(chalk.yellow(`[Dev] Tracing → ${devTraceRecorder.path}`))
+  }
   console.log(chalk.dim('Type /help for available commands\n'))
 
   // AskUserTool 的交互回调（REPL 模式下通过 readline 向用户提问）
@@ -498,7 +535,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     })
   }
 
-  const engineConfig = { apiClient, tools, adapter, contextProviders, askUser, mcpManager }
+  const engineConfig = { apiClient, tools, adapter, contextProviders, askUser, mcpManager, devTraceRecorder }
 
   // Coordinator-aware run function
   async function runQuery(userContent: string) {
@@ -524,18 +561,57 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         maxTurns: 50,
       })
 
+      // Dev trace 状态（coordinator 模式）
+      const coordToolStartTimes = new Map<string, number>()
+      let coordTurn = 0
+      let coordTurnStart = Date.now()
+      let coordTextBuffer = ''
+
       for (;;) {
         const iterResult = await loop.next()
         if (iterResult.done) break
-        adapter.onStreamEvent(iterResult.value)
-        if (iterResult.value.type === 'tool_use_start') {
-          adapter.onToolStart(iterResult.value.name, iterResult.value.input)
+
+        const event = iterResult.value
+        adapter.onStreamEvent(event)
+
+        if (devTraceRecorder) {
+          if (event.type === 'message_start') {
+            coordTurn++
+            coordTurnStart = Date.now()
+            coordTextBuffer = ''
+            await devTraceRecorder.record({ type: 'turn_start', turn: coordTurn, timestamp: new Date().toISOString() })
+          } else if (event.type === 'text_delta') {
+            coordTextBuffer += event.text
+          } else if (event.type === 'tool_use_start') {
+            if (coordTextBuffer) {
+              await devTraceRecorder.record({ type: 'text', turn: coordTurn, text: coordTextBuffer })
+              coordTextBuffer = ''
+            }
+            coordToolStartTimes.set(event.id, Date.now())
+            await devTraceRecorder.record({ type: 'tool_call', turn: coordTurn, name: event.name, toolUseId: event.id, input: event.input, startedAt: new Date().toISOString() })
+          } else if (event.type === 'tool_result') {
+            const startMs = coordToolStartTimes.get(event.toolUseId) ?? Date.now()
+            coordToolStartTimes.delete(event.toolUseId)
+            await devTraceRecorder.record({ type: 'tool_result', turn: coordTurn, name: event.toolName, toolUseId: event.toolUseId, output: event.result, durationMs: Date.now() - startMs, isError: event.isError ?? false })
+          } else if (event.type === 'turn_complete') {
+            if (coordTextBuffer) {
+              await devTraceRecorder.record({ type: 'text', turn: coordTurn, text: coordTextBuffer })
+              coordTextBuffer = ''
+            }
+            await devTraceRecorder.record({ type: 'turn_end', turn: event.turnCount, inputTokens: event.usage.inputTokens, outputTokens: event.usage.outputTokens, durationMs: Date.now() - coordTurnStart, timestamp: new Date().toISOString() })
+          } else if (event.type === 'error') {
+            await devTraceRecorder.record({ type: 'error', turn: coordTurn, message: event.error.message, timestamp: new Date().toISOString() })
+          }
         }
-        if (iterResult.value.type === 'tool_result') {
-          adapter.onToolEnd(iterResult.value.toolName, { data: iterResult.value.result })
+
+        if (event.type === 'tool_use_start') {
+          adapter.onToolStart(event.name, event.input)
         }
-        if (iterResult.value.type === 'error') {
-          adapter.onError(iterResult.value.error)
+        if (event.type === 'tool_result') {
+          adapter.onToolEnd(event.toolName, { data: event.result })
+        }
+        if (event.type === 'error') {
+          adapter.onError(event.error)
         }
       }
     } else {
@@ -598,6 +674,15 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       continue
     }
 
+    if (userInput === '/trace') {
+      if (devTraceRecorder) {
+        console.log(chalk.dim(`Dev trace: ${devTraceRecorder.path}`))
+      } else {
+        console.log(chalk.yellow('[Dev mode is not active. Start with --dev flag or set "devTrace": true in settings.json]'))
+      }
+      continue
+    }
+
     if (userInput === '/status') {
       // 优先使用 totalCostUSD（由 accumulateUsage 精确累加），
       // 仅当为 0 时用 estimateCost 兜底（首次 /status 且还未调用工具）
@@ -637,6 +722,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         ['/export md',              '导出当前会话为 Markdown'],
         ['/config',                 '查看当前配置'],
         ['/config set <key> <val>', '写入配置（如 api.model / api.anthropicApiKey）'],
+        ['/trace',                  '显示当前 dev trace 文件路径（需 --dev 模式）'],
         ['/exit',                   '退出'],
       ]
       for (const [cmd, desc] of cmds) {
@@ -790,6 +876,21 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   }
 
   await flushTranscript(state).catch(() => {})
+
+  // ── Dev Trace 收尾 ────────────────────────────────────────────────────────
+  if (devTraceRecorder) {
+    await devTraceRecorder.record({
+      type: 'session_end',
+      reason: 'exit',
+      totalTurns: state.messages.filter(m => m.role === 'assistant').length,
+      totalInputTokens: state.totalInputTokens,
+      totalOutputTokens: state.totalOutputTokens,
+      timestamp: new Date().toISOString(),
+    })
+    console.log(chalk.yellow(`[Dev] Trace saved → ${devTraceRecorder.path}`))
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   await mcpManager.disconnectAll().catch(() => {})
   await adapter.destroy()
   console.log(chalk.dim('\nGoodbye!'))

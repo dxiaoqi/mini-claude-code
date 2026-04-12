@@ -36,17 +36,14 @@ export class Logger {
     }
 
     if (config.pretty) {
-      const prettyStream = pinoPretty({
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-      })
+      // 交互模式下写到 stderr（fd=2），避免结构化日志污染 stdout 的 CLI 输出
       pinoConfig.transport = {
         target: 'pino-pretty',
         options: {
           colorize: true,
           translateTime: 'SYS:standard',
           ignore: 'pid,hostname',
+          destination: 2,
         },
       }
     }
