@@ -69,6 +69,42 @@ export async function compactSession(sessionId: string): Promise<{ ok: boolean; 
   return res.json()
 }
 
+// ── Config API ────────────────────────────────────────────────────────────────
+
+export interface WorkspaceConfig {
+  model?: string
+  fallbackModel?: string
+  permissionMode?: 'default' | 'plan' | 'auto' | 'bypass'
+  devTrace?: boolean
+  tavilyApiKey?: string
+  api?: {
+    provider?: string
+    anthropicApiKey?: string
+    anthropicBaseUrl?: string
+    openaiApiKey?: string
+    openaiBaseUrl?: string
+    model?: string
+    /** Server-side: whether a key is already set (key value not returned) */
+    hasAnthropicKey?: boolean
+    hasOpenaiKey?: boolean
+  }
+}
+
+export async function getConfig(): Promise<WorkspaceConfig> {
+  const res = await fetch(`${API_BASE}/api/config`)
+  if (!res.ok) return {}
+  return res.json()
+}
+
+export async function updateConfig(config: Partial<WorkspaceConfig>): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  return res.json()
+}
+
 export async function respondPermission(
   requestId: string,
   decision: 'allow' | 'allow_always' | 'deny',

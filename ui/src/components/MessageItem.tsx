@@ -3,9 +3,7 @@
 import type { ChatMessage } from '@/lib/types'
 import ToolCallCard from './ToolCallCard'
 
-interface Props {
-  message: ChatMessage
-}
+interface Props { message: ChatMessage }
 
 export default function MessageItem({ message }: Props) {
   const isUser = message.role === 'user'
@@ -13,8 +11,17 @@ export default function MessageItem({ message }: Props) {
 
   if (isSystem) {
     return (
-      <div className="flex justify-center my-2">
-        <span className="text-xs text-zinc-500 bg-zinc-800/50 px-3 py-1 rounded-full">
+      <div className="fade-up" style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            padding: '3px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 20,
+            background: 'var(--bg-elevated)',
+          }}
+        >
           {message.text}
         </span>
       </div>
@@ -22,41 +29,97 @@ export default function MessageItem({ message }: Props) {
   }
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div
+      className="fade-up"
+      style={{
+        display: 'flex',
+        gap: 10,
+        flexDirection: isUser ? 'row-reverse' : 'row',
+        alignItems: 'flex-start',
+      }}
+    >
       {/* Avatar */}
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 mt-1
-        ${isUser ? 'bg-blue-600 text-white' : 'bg-zinc-700 text-zinc-300'}`}>
-        {isUser ? 'U' : 'AI'}
+      <div
+        className="mono"
+        style={{
+          width: 26,
+          height: 26,
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 10,
+          color: 'var(--text-secondary)',
+          flexShrink: 0,
+          marginTop: 2,
+          background: 'var(--bg-elevated)',
+          letterSpacing: '-0.02em',
+        }}
+      >
+        {isUser ? 'you' : 'ai'}
       </div>
 
-      {/* Bubble */}
-      <div className={`max-w-[80%] flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
-        {/* Text */}
+      {/* Content */}
+      <div
+        style={{
+          maxWidth: '78%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          alignItems: isUser ? 'flex-end' : 'flex-start',
+        }}
+      >
+        {/* Text bubble */}
         {(message.text || message.isStreaming) && (
-          <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap
-            ${isUser
-              ? 'bg-blue-600 text-white rounded-tr-sm'
-              : 'bg-zinc-800 text-zinc-100 rounded-tl-sm'}`}>
+          <div
+            style={{
+              padding: '9px 13px',
+              borderRadius: isUser ? '8px 2px 8px 8px' : '2px 8px 8px 8px',
+              fontSize: 14,
+              lineHeight: 1.65,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              ...(isUser
+                ? {
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text)',
+                    boxShadow: 'var(--shadow-sm)',
+                  }
+                : {
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    padding: '2px 0',
+                  }),
+            }}
+          >
             {message.text}
-            {message.isStreaming && (
-              <span className="inline-block w-1.5 h-4 ml-0.5 bg-zinc-400 animate-pulse align-middle" />
-            )}
+            {message.isStreaming && <span className="cursor-blink" />}
           </div>
         )}
 
         {/* Tool calls */}
         {message.toolCalls.length > 0 && (
-          <div className="w-full max-w-lg flex flex-col gap-1.5">
+          <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {message.toolCalls.map(tc => (
               <ToolCallCard key={tc.id} call={tc} />
             ))}
           </div>
         )}
 
-        {/* Usage */}
+        {/* Token usage */}
         {message.usage && !message.isStreaming && (
-          <div className="text-[10px] text-zinc-600 px-1">
-            {message.usage.inputTokens}↑ {message.usage.outputTokens}↓ tokens
+          <div
+            className="mono"
+            style={{
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              padding: '0 2px',
+            }}
+          >
+            {message.usage.inputTokens.toLocaleString()}↑ {message.usage.outputTokens.toLocaleString()}↓
           </div>
         )}
       </div>

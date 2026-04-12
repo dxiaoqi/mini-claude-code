@@ -24,6 +24,9 @@ import { createSessionState } from '../state/SessionState.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
+import { loadSettings, getLocalConfigPath } from '../utils/config.js'
+import { writeFile, mkdir } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import type {
   APIClient,
   CanUseToolFn,
@@ -153,6 +156,84 @@ export function createMiniClaudeServer(config: ServerConfig) {
     if (method === 'OPTIONS') {
       res.writeHead(204)
       res.end()
+      return
+    }
+
+    // ── GET /api/config ──
+    if (method === 'GET' && path === '/api/config') {
+      try {
+        const settings = await loadSettings(config.cwd)
+        // 返回 workspace 可编辑的字段（不返回 API key 明文，只返回是否已设置）
+        json(res, {
+          model: settings.api?.model || config.defaultModel,
+          fallbackModel: settings.fallbackModel,
+          permissionMode: settings.permissionMode || 'default',
+          devTrace: settings.devTrace || false,
+          api: {
+            provider: settings.api?.provider,
+            anthropicBaseUrl: settings.api?.anthropicBaseUrl,
+            openaiBaseUrl: settings.api?.openaiBaseUrl,
+            hasAnthropicKey: !!(settings.api?.anthropicApiKey),
+            hasOpenaiKey: !!(settings.api?.openaiApiKey),
+          },
+        })
+      } catch {
+        json(res, {})
+      }
+      return
+    }
+
+    // ── PUT /api/config ──
+    if (method === 'PUT' && path === '/api/config') {
+      try {
+        const body = await readBody(req) as Record<string, unknown>
+        const localConfigPath = getLocalConfigPath(config.cwd)
+
+        // 读取现有 local config
+        let existing: Record<string, unknown> = {}
+        try {
+          const { readFile } = await import('node:fs/promises')
+          existing = JSON.parse(await readFile(localConfigPath, 'utf-8'))
+        } catch { /* first time */ }
+
+        // 合并：只更新允许的字段
+        if (body.permissionMode) existing.permissionMode = body.permissionMode
+        if (body.devTrace !== undefined) existing.devTrace = body.devTrace
+        if (body.fallbackModel !== undefined) existing.fallbackModel = body.fallbackModel
+
+        // api 子对象
+        if (body.api && typeof body.api === 'object') {
+          const apiUpdate = body.api as Record<string, unknown>
+          const existingApi = (existing.api as Record<string, unknown>) || {}
+          if (apiUpdate.model !== undefined) existingApi.model = apiUpdate.model
+          if (apiUpdate.provider !== undefined) existingApi.provider = apiUpdate.provider
+          if (apiUpdate.anthropicBaseUrl !== undefined) existingApi.anthropicBaseUrl = apiUpdate.anthropicBaseUrl
+          if (apiUpdate.openaiBaseUrl !== undefined) existingApi.openaiBaseUrl = apiUpdate.openaiBaseUrl
+          // API keys: only write if non-empty string
+          if (typeof apiUpdate.anthropicApiKey === 'string' && apiUpdate.anthropicApiKey.length > 0) {
+            existingApi.anthropicApiKey = apiUpdate.anthropicApiKey
+          }
+          if (typeof apiUpdate.openaiApiKey === 'string' && apiUpdate.openaiApiKey.length > 0) {
+            existingApi.openaiApiKey = apiUpdate.openaiApiKey
+          }
+          existing.api = existingApi
+        }
+
+        await mkdir(dirname(localConfigPath), { recursive: true })
+        await writeFile(localConfigPath, JSON.stringify(existing, null, 2), 'utf-8')
+
+        // 更新活跃 session 的 model
+        if (body.api && typeof (body.api as Record<string, unknown>).model === 'string') {
+          const newModel = (body.api as Record<string, unknown>).model as string
+          for (const entry of sessions.values()) {
+            entry.state.model = newModel
+          }
+        }
+
+        json(res, { ok: true })
+      } catch (err) {
+        json(res, { ok: false, error: (err as Error).message }, 500)
+      }
       return
     }
 

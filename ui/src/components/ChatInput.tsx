@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 
 interface Props {
   onSend: (message: string) => void
@@ -15,42 +15,97 @@ export default function ChatInput({ onSend, disabled, placeholder }: Props) {
     const text = ref.current?.value.trim()
     if (!text || disabled) return
     onSend(text)
-    if (ref.current) ref.current.value = ''
-    autoResize()
+    if (ref.current) { ref.current.value = ''; autoResize() }
   }
 
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
   function autoResize() {
     if (!ref.current) return
     ref.current.style.height = 'auto'
-    ref.current.style.height = Math.min(ref.current.scrollHeight, 200) + 'px'
+    ref.current.style.height = Math.min(ref.current.scrollHeight, 180) + 'px'
   }
 
   return (
-    <div className="flex items-end gap-3 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 focus-within:border-zinc-500 transition-colors">
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 8,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        padding: '10px 10px 10px 14px',
+        transition: 'border-color 0.13s, box-shadow 0.13s',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+      onFocus={() => {}}
+      // Handled by CSS :focus-within
+    >
+      <style>{`
+        .chat-wrap:focus-within {
+          border-color: var(--border-focus) !important;
+          box-shadow: 0 0 0 3px rgba(128,128,128,0.07), var(--shadow-sm) !important;
+        }
+      `}</style>
       <textarea
         ref={ref}
         rows={1}
         disabled={disabled}
-        placeholder={placeholder || 'Message mini-claude… (Shift+Enter for newline)'}
+        placeholder={placeholder || 'Message mini-claude… (Enter to send, Shift+Enter for newline)'}
         onKeyDown={onKey}
         onInput={autoResize}
-        className="flex-1 bg-transparent text-zinc-100 placeholder-zinc-500 text-sm resize-none outline-none min-h-[24px] max-h-[200px] disabled:opacity-50"
+        style={{
+          flex: 1,
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          resize: 'none',
+          fontSize: 14,
+          lineHeight: 1.6,
+          color: 'var(--text)',
+          minHeight: 22,
+          maxHeight: 180,
+          fontFamily: 'inherit',
+        }}
+        className="placeholder-[var(--text-placeholder)]"
       />
+
+      {/* Send button */}
       <button
         onClick={send}
         disabled={disabled}
-        className="w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 transition-colors"
         title="Send (Enter)"
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: 6,
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          transition: 'all 0.13s',
+        }}
+        onMouseEnter={e => {
+          if (!disabled) {
+            (e.target as HTMLElement).closest('button')!.style.borderColor = 'var(--border-focus)'
+            ;(e.target as HTMLElement).closest('button')!.style.color = 'var(--text)'
+          }
+        }}
+        onMouseLeave={e => {
+          ;(e.target as HTMLElement).closest('button')!.style.borderColor = 'var(--border)'
+          ;(e.target as HTMLElement).closest('button')!.style.color = 'var(--text-secondary)'
+        }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z" />
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
       </button>
     </div>

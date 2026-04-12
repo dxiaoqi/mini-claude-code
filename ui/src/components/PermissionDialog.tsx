@@ -8,12 +8,6 @@ interface Props {
   onResolved: () => void
 }
 
-const RISK_COLORS: Record<string, string> = {
-  low: 'text-green-400',
-  medium: 'text-yellow-400',
-  high: 'text-red-400',
-}
-
 export default function PermissionDialog({ request, onResolved }: Props) {
   async function respond(decision: 'allow' | 'allow_always' | 'deny') {
     await respondPermission(request.requestId, decision)
@@ -21,57 +15,107 @@ export default function PermissionDialog({ request, onResolved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-6 max-w-lg w-full mx-4">
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(4px)',
+      }}
+    >
+      <div
+        className="fade-up card"
+        style={{
+          padding: 20,
+          maxWidth: 440,
+          width: '100%',
+          margin: '0 16px',
+          boxShadow: 'var(--shadow-lg)',
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400 text-sm">
-            🔒
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+              style={{ color: 'var(--text-secondary)' }}>
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
           </div>
           <div>
-            <h3 className="font-semibold text-zinc-100">Permission Required</h3>
-            <p className="text-xs text-zinc-400">
-              Tool:{' '}
-              <span className="font-mono text-zinc-300">{request.toolName}</span>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+              Permission required
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              <code style={{ fontFamily: 'var(--font-geist-mono)', background: 'var(--bg-hover)', padding: '1px 5px', borderRadius: 3 }}>
+                {request.toolName}
+              </code>
               {' · '}
-              <span className={RISK_COLORS[request.riskLevel] || 'text-yellow-400'}>
+              <span style={{ color: request.riskLevel === 'high' ? '#cc6666' : request.riskLevel === 'medium' ? '#aa8844' : 'var(--text-muted)' }}>
                 {request.riskLevel} risk
               </span>
-            </p>
+            </div>
           </div>
         </div>
 
-        {/* Request message */}
         {request.message && (
-          <p className="text-sm text-zinc-300 mb-4 leading-relaxed">{request.message}</p>
+          <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.6 }}>
+            {request.message}
+          </p>
         )}
 
-        {/* Input preview */}
         {Object.keys(request.input).length > 0 && (
-          <div className="bg-zinc-950 rounded-lg p-3 mb-5 font-mono text-xs text-zinc-300 overflow-auto max-h-32">
+          <pre
+            className="mono"
+            style={{
+              fontSize: 11,
+              color: 'var(--text)',
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 10px',
+              marginBottom: 14,
+              overflow: 'auto',
+              maxHeight: 120,
+              margin: '0 0 14px',
+            }}
+          >
             {JSON.stringify(request.input, null, 2)}
-          </div>
+          </pre>
         )}
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => respond('deny')}
-            className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm transition-colors"
-          >
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn" onClick={() => respond('deny')} style={{ flex: 1, justifyContent: 'center' }}>
             Deny
           </button>
           <button
+            className="btn"
             onClick={() => respond('allow')}
-            className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            style={{ flex: 1, justifyContent: 'center', borderColor: 'var(--border-focus)', color: 'var(--text)' }}
           >
             Allow
           </button>
           <button
+            className="btn"
             onClick={() => respond('allow_always')}
-            className="flex-1 px-3 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-medium transition-colors"
+            style={{ flex: 1, justifyContent: 'center' }}
           >
-            Always Allow
+            Always
           </button>
         </div>
       </div>
