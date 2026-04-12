@@ -3,210 +3,103 @@
 import { useState } from 'react'
 import type { ToolCall } from '@/lib/types'
 
-const TOOL_LABELS: Record<string, string> = {
-  Bash: 'bash',
-  FileRead: 'read',
-  FileEdit: 'edit',
-  FileWrite: 'write',
-  Glob: 'glob',
-  Grep: 'grep',
-  WebFetch: 'fetch',
-  WebSearch: 'search',
-  Agent: 'agent',
-  TodoWrite: 'todo',
-  AskUser: 'ask',
-  Skill: 'skill',
+const ABBR: Record<string, string> = {
+  Bash: 'bash', FileRead: 'read', FileEdit: 'edit', FileWrite: 'write',
+  Glob: 'glob', Grep: 'grep', WebFetch: 'fetch', WebSearch: 'search',
+  Agent: 'agent', TodoWrite: 'todo', AskUser: 'ask',
 }
 
-function StatusIndicator({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') {
-    return (
-      <span className="flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
-        <span className="flex gap-0.5">
-          {[0, 1, 2].map(i => (
-            <span
-              key={i}
-              className="inline-block w-1 h-1 rounded-full"
-              style={{
-                background: 'var(--text-muted)',
-                animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
-              }}
-            />
-          ))}
-        </span>
-        <span style={{ fontSize: 11 }}>running</span>
-      </span>
-    )
-  }
-  if (status === 'error') {
-    return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>✗ error</span>
-  }
-  return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>✓ done</span>
-}
-
-function getInputSummary(name: string, input: Record<string, unknown>): string {
-  if (name === 'Bash') return String(input.command || '').slice(0, 80)
-  if (name === 'FileRead' || name === 'FileEdit' || name === 'FileWrite') {
-    return String(input.file_path || input.path || '').replace(/.*\//, '')
-  }
+function summary(name: string, input: Record<string, unknown>) {
+  if (name === 'Bash') return String(input.command || '').slice(0, 72)
+  const path = input.file_path || input.path || input.notebook_path
+  if (path) return String(path).replace(/.*\//, '').slice(0, 60)
   if (name === 'Glob') return String(input.pattern || input.glob_pattern || '')
-  if (name === 'Grep') return String(input.pattern || '')
+  if (name === 'Grep') return String(input.pattern || '').slice(0, 60)
   if (name === 'WebFetch') return String(input.url || '').replace(/^https?:\/\//, '').slice(0, 60)
-  if (name === 'TodoWrite') {
-    const todos = input.todos as Array<{ content: string; status: string }> | undefined
-    if (todos?.length) return todos.map(t => t.content.slice(0, 20)).join(', ')
-  }
   const vals = Object.values(input)
-  if (vals.length === 0) return ''
-  return String(vals[0]).slice(0, 60)
+  return vals.length ? String(vals[0]).slice(0, 60) : ''
 }
 
-export default function ToolCallCard({ call }: { call: ToolCall }) {
-  const [expanded, setExpanded] = useState(false)
-  const label = TOOL_LABELS[call.name] || call.name.toLowerCase()
-  const summary = getInputSummary(call.name, call.input)
-  const resultText = call.result
-    ? typeof call.result === 'string' ? call.result : JSON.stringify(call.result, null, 2)
-    : null
+export default function ToolCallCard({ call: c }: { call: ToolCall }) {
+  const [open, setOpen] = useState(false)
+  const label = ABBR[c.name] || c.name.toLowerCase()
+  const text  = c.result ? (typeof c.result === 'string' ? c.result : JSON.stringify(c.result, null, 2)) : null
 
-  const borderColor = call.status === 'error' ? 'rgba(180,50,50,0.3)' : 'var(--border)'
-  const bgColor = call.status === 'error' ? 'rgba(180,50,50,0.04)' : 'var(--bg-elevated)'
+  const running = c.status === 'running'
+  const error   = c.status === 'error'
 
   return (
     <div
-      className="fade-up"
       style={{
-        border: `1px solid ${borderColor}`,
-        borderRadius: 'var(--radius-sm)',
-        background: bgColor,
-        transition: 'border-color 0.15s',
-        overflow: 'hidden',
+        border: `1px solid ${error ? 'rgba(160,50,50,.3)' : 'var(--border)'}`,
+        borderRadius: 5, overflow: 'hidden',
+        background: error ? 'rgba(160,50,50,.03)' : 'var(--surface)',
+        transition: 'border-color .12s',
       }}
     >
-      {/* Header */}
+      {/* row */}
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="w-full text-left"
+        onClick={() => setOpen(v => !v)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 10px',
-          cursor: 'pointer',
-          background: 'none',
-          border: 'none',
-          color: 'inherit',
+          display: 'flex', alignItems: 'center', gap: 8,
+          width: '100%', padding: '5px 9px',
+          background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', textAlign: 'left',
         }}
       >
-        {/* Tool label */}
-        <code
-          className="mono"
-          style={{
-            fontSize: 11,
-            padding: '1px 6px',
-            borderRadius: 3,
-            border: '1px solid var(--border)',
-            color: 'var(--text-secondary)',
-            background: 'var(--bg)',
-            flexShrink: 0,
-          }}
-        >
+        <code style={{
+          fontSize: 10, padding: '1px 5px', borderRadius: 3,
+          border: '1px solid var(--border)', background: 'var(--bg)',
+          color: 'var(--text-2)', flexShrink: 0,
+          fontFamily: 'var(--font-geist-mono)',
+        }}>
           {label}
         </code>
-
-        {/* Summary */}
-        <span
-          className="mono"
-          style={{
-            fontSize: 12,
-            color: 'var(--text)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-          }}
-        >
-          {summary}
+        <span style={{
+          fontSize: 11, fontFamily: 'var(--font-geist-mono)',
+          color: 'var(--text)', flex: 1, overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {summary(c.name, c.input)}
         </span>
-
-        {/* Status + toggle */}
-        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <StatusIndicator status={call.status} />
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            style={{
-              color: 'var(--text-muted)',
-              transform: expanded ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.15s',
-            }}
-          >
-            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+          {running && (
+            <span style={{ display: 'flex', gap: 2 }}>
+              {[0,1,2].map(i => (
+                <span key={i} style={{
+                  width: 3, height: 3, borderRadius: '50%',
+                  background: 'var(--text-3)', display: 'inline-block',
+                  animation: `dot .9s ease-in-out ${i*.15}s infinite`,
+                }}/>
+              ))}
+            </span>
+          )}
+          {!running && (
+            <span style={{ fontSize: 10, color: error ? 'rgba(180,60,60,.9)' : 'var(--text-3)' }}>
+              {error ? '✗' : '✓'}
+            </span>
+          )}
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            style={{ color: 'var(--text-3)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .13s' }}>
+            <polyline points="6 9 12 15 18 9"/>
           </svg>
         </span>
       </button>
 
-      {/* Expanded body */}
-      {expanded && (
+      {open && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          {/* Input */}
-          <div style={{ padding: '8px 10px' }}>
-            <div
-              style={{
-                fontSize: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: 'var(--text-muted)',
-                marginBottom: 4,
-              }}
-            >
-              Input
-            </div>
-            <pre
-              className="mono"
-              style={{
-                fontSize: 11,
-                color: 'var(--text)',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                maxHeight: 160,
-                overflow: 'auto',
-                margin: 0,
-              }}
-            >
-              {JSON.stringify(call.input, null, 2)}
+          <div style={{ padding: '7px 9px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>Input</div>
+            <pre style={{ fontSize: 11, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 140, overflow: 'auto', margin: 0, fontFamily: 'var(--font-geist-mono)' }}>
+              {JSON.stringify(c.input, null, 2)}
             </pre>
           </div>
-
-          {/* Result */}
-          {resultText && (
-            <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  color: call.isError ? 'rgba(200,80,80,0.8)' : 'var(--text-muted)',
-                  marginBottom: 4,
-                }}
-              >
-                {call.isError ? 'Error' : 'Result'}
+          {text && (
+            <div style={{ borderTop: '1px solid var(--border)', padding: '7px 9px' }}>
+              <div style={{ fontSize: 10, color: error ? 'rgba(180,60,60,.8)' : 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
+                {error ? 'Error' : 'Output'}
               </div>
-              <pre
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  color: call.isError ? 'rgba(220,100,100,1)' : 'var(--text)',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                  maxHeight: 200,
-                  overflow: 'auto',
-                  margin: 0,
-                }}
-              >
-                {resultText.slice(0, 3000)}{resultText.length > 3000 ? '\n…(truncated)' : ''}
+              <pre style={{ fontSize: 11, color: error ? 'rgba(200,80,80,1)' : 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto', margin: 0, fontFamily: 'var(--font-geist-mono)' }}>
+                {text.slice(0, 3000)}{text.length > 3000 ? '\n…' : ''}
               </pre>
             </div>
           )}

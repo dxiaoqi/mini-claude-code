@@ -7,550 +7,373 @@ import type { ChatMessage, PermissionRequest, ToolCall } from '@/lib/types'
 import MessageItem from '@/components/MessageItem'
 import ChatInput from '@/components/ChatInput'
 import PermissionDialog from '@/components/PermissionDialog'
-import ConfigPanel from '@/components/ConfigPanel'
+import ConfigModal from '@/components/ConfigModal'
 import { useTheme } from '@/context/ThemeContext'
 import { v4 as uuid } from 'uuid'
 
-// ── Icons ────────────────────────────────────────────────────────────────────
+/* ── tiny icons ──────────────────────────────────────────── */
+const Sun = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+    <line x1="4.2" y1="4.2" x2="5.6" y2="5.6"/><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"/>
+    <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+    <line x1="4.2" y1="19.8" x2="5.6" y2="18.4"/><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"/>
+  </svg>
+)
+const Moon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+)
+const Gear = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+)
+const Plus = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
+const History = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polyline points="1 4 1 10 7 10"/>
+    <path d="M3.51 15a9 9 0 1 0 .49-3"/>
+  </svg>
+)
 
-function SunIcon() {
+/* ── small btn ───────────────────────────────────────────── */
+function Btn({
+  children, onClick, disabled, active, title,
+}: {
+  children: React.ReactNode; onClick?: () => void
+  disabled?: boolean; active?: boolean; title?: string
+}) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <circle cx="12" cy="12" r="5" />
-      <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-    </svg>
-  )
-}
-
-function MoonIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-function SettingsIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  )
-}
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
-    >
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  )
-}
-
-// ── Sidebar ───────────────────────────────────────────────────────────────────
-
-interface SidebarProps {
-  sessionId: string | null
-  sessionInfo: SessionInfo | null
-  recentSessions: { sessionId: string; modifiedAt: string }[]
-  onNew: () => void
-  onResume: (id: string) => void
-  onCompact: () => void
-  isStreaming: boolean
-  activePanel: 'sessions' | 'config' | null
-  onTogglePanel: (p: 'sessions' | 'config') => void
-}
-
-function Sidebar({
-  sessionId, sessionInfo, recentSessions,
-  onNew, onResume, onCompact, isStreaming,
-  activePanel, onTogglePanel,
-}: SidebarProps) {
-  return (
-    <aside
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
       style={{
-        width: 220,
-        borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--bg)',
-        flexShrink: 0,
-        overflow: 'hidden',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 9px',
+        fontSize: 12, fontWeight: 500,
+        border: `1px solid ${active ? 'var(--border-mid)' : 'var(--border)'}`,
+        borderRadius: 5,
+        background: active ? 'var(--border)' : 'transparent',
+        color: active ? 'var(--text)' : 'var(--text-2)',
+        cursor: 'pointer',
+        transition: 'all .12s',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => {
+        if (!disabled) {
+          const el = e.currentTarget
+          el.style.borderColor = 'var(--border-mid)'
+          el.style.color = 'var(--text)'
+        }
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget
+        el.style.borderColor = active ? 'var(--border-mid)' : 'var(--border)'
+        el.style.color = active ? 'var(--text)' : 'var(--text-2)'
       }}
     >
-      {/* Logo */}
-      <div
-        style={{
-          padding: '14px 14px 10px',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
-          mini-claude
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--font-geist-mono)' }}>
-          code assistant
-        </div>
-      </div>
-
-      {/* Session actions */}
-      <div style={{ padding: '10px 10px 6px' }}>
-        <button className="btn" onClick={onNew} style={{ width: '100%', justifyContent: 'center' }}>
-          <PlusIcon /> New session
-        </button>
-      </div>
-
-      {/* Current session info */}
-      {sessionInfo && (
-        <div style={{ padding: '4px 12px 8px' }}>
-          <div
-            style={{
-              padding: '7px 9px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--bg-elevated)',
-            }}
-          >
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Current session</div>
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-geist-mono)', color: 'var(--text)', marginBottom: 2 }}>
-              {sessionInfo.id.slice(0, 12)}…
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-              {(sessionInfo.totalInputTokens + sessionInfo.totalOutputTokens).toLocaleString()} tokens
-              {sessionInfo.totalCostUSD > 0.0001 && (
-                <> · ${sessionInfo.totalCostUSD.toFixed(4)}</>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-              <button
-                className="btn btn-ghost"
-                onClick={onCompact}
-                disabled={isStreaming || !sessionId}
-                style={{ fontSize: 10, padding: '2px 7px' }}
-              >
-                /compact
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sessions list section */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <button
-          onClick={() => onTogglePanel('sessions')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            fontSize: 10,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            width: '100%',
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <span>History</span>
-          <ChevronIcon open={activePanel === 'sessions'} />
-        </button>
-
-        {activePanel === 'sessions' && (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {recentSessions.length === 0 ? (
-              <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)' }}>
-                No history yet
-              </div>
-            ) : (
-              recentSessions.map(s => (
-                <button
-                  key={s.sessionId}
-                  onClick={() => onResume(s.sessionId)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '7px 12px',
-                    background: s.sessionId === sessionId ? 'var(--bg-hover)' : 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid var(--border)',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = s.sessionId === sessionId ? 'var(--bg-hover)' : 'none')}
-                >
-                  <div
-                    style={{ fontSize: 11, fontFamily: 'var(--font-geist-mono)', color: 'var(--text)', marginBottom: 1 }}
-                  >
-                    {s.sessionId.slice(0, 12)}…
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    {new Date(s.modifiedAt).toLocaleDateString()}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Config section toggle at bottom */}
-      <div style={{ borderTop: '1px solid var(--border)' }}>
-        <button
-          onClick={() => onTogglePanel('config')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 12px',
-            background: activePanel === 'config' ? 'var(--bg-hover)' : 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            fontSize: 11,
-            width: '100%',
-            transition: 'background 0.1s',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <SettingsIcon /> Config
-          </span>
-          <ChevronIcon open={activePanel === 'config'} />
-        </button>
-      </div>
-    </aside>
+      {children}
+    </button>
   )
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+/* ── history popover ─────────────────────────────────────── */
+function HistoryPopover({
+  sessions, current, onResume, onClose,
+}: {
+  sessions: { sessionId: string; modifiedAt: string }[]
+  current: string | null
+  onResume: (id: string) => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+      <div
+        className="in-up"
+        style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+          zIndex: 40, width: 260,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          boxShadow: 'var(--shadow-lg)',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>Recent sessions</span>
+        </div>
+        {sessions.length === 0 ? (
+          <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>No history</div>
+        ) : (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', maxHeight: 260, overflowY: 'auto' }}>
+            {sessions.map(s => (
+              <li key={s.sessionId}>
+                <button
+                  onClick={() => { onResume(s.sessionId); onClose() }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '7px 12px',
+                    background: s.sessionId === current ? 'var(--border)' : 'none',
+                    border: 'none', cursor: 'pointer',
+                    borderBottom: '1px solid var(--border)',
+                    transition: 'background .1s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--border)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = s.sessionId === current ? 'var(--border)' : 'none')}
+                >
+                  <div style={{ fontSize: 11, fontFamily: 'var(--font-geist-mono)', color: 'var(--text)' }}>
+                    {s.sessionId.slice(0, 16)}…
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                    {new Date(s.modifiedAt).toLocaleString()}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  )
+}
 
-export default function ChatPage() {
+/* ── main ────────────────────────────────────────────────── */
+const PROMPTS = ['read package.json', 'git status', 'list src/ files', '帮我写 hello.ts']
+
+export default function Page() {
   const { theme, toggle } = useTheme()
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionId, setSessionId]   = useState<string | null>(null)
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [permRequest, setPermRequest] = useState<PermissionRequest | null>(null)
-  const [recentSessions, setRecentSessions] = useState<{ sessionId: string; modifiedAt: string }[]>([])
-  const [activePanel, setActivePanel] = useState<'sessions' | 'config' | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
+  const [messages, setMessages]     = useState<ChatMessage[]>([])
+  const [streaming, setStreaming]   = useState(false)
+  const [permReq, setPermReq]       = useState<PermissionRequest | null>(null)
+  const [history, setHistory]       = useState<{ sessionId: string; modifiedAt: string }[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+  const [showConfig, setShowConfig] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef  = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    createSession().then(info => { setSessionId(info.id); setSessionInfo(info) })
-    getSessions().then(d => setRecentSessions(d.history || []))
+    createSession().then(i => { setSessionId(i.id); setSessionInfo(i) })
+    getSessions().then(d => setHistory(d.history || []))
   }, [])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  function addMessage(msg: ChatMessage) {
-    setMessages(prev => [...prev, msg])
-  }
+  function addMsg(m: ChatMessage) { setMessages(p => [...p, m]) }
 
-  function updateLastAssistant(updater: (msg: ChatMessage) => ChatMessage) {
-    setMessages(prev => {
-      const last = [...prev]
-      for (let i = last.length - 1; i >= 0; i--) {
-        if (last[i].role === 'assistant') { last[i] = updater(last[i]); break }
+  function patchLast(fn: (m: ChatMessage) => ChatMessage) {
+    setMessages(p => {
+      const a = [...p]
+      for (let i = a.length - 1; i >= 0; i--) {
+        if (a[i].role === 'assistant') { a[i] = fn(a[i]); break }
       }
-      return last
+      return a
     })
   }
 
-  async function sendMessage(text: string) {
-    if (!sessionId || isStreaming) return
-    addMessage({ id: uuid(), role: 'user', text, toolCalls: [], timestamp: Date.now() })
-    const aId = uuid()
-    addMessage({ id: aId, role: 'assistant', text: '', toolCalls: [], isStreaming: true, timestamp: Date.now() })
-    setIsStreaming(true)
+  async function send(text: string) {
+    if (!sessionId || streaming) return
+    addMsg({ id: uuid(), role: 'user', text, toolCalls: [], timestamp: Date.now() })
+    addMsg({ id: uuid(), role: 'assistant', text: '', toolCalls: [], isStreaming: true, timestamp: Date.now() })
+    setStreaming(true)
     abortRef.current = new AbortController()
 
     try {
-      for await (const event of streamChatFetch(sessionId, text, {}, abortRef.current.signal)) {
-        switch (event.type) {
-          case 'text_delta':
-            updateLastAssistant(m => ({ ...m, text: m.text + event.text }))
-            break
-          case 'tool_use_start': {
-            const tc: ToolCall = { id: event.id, name: event.name, input: event.input, status: 'running' }
-            updateLastAssistant(m => ({ ...m, toolCalls: [...m.toolCalls, tc] }))
-            break
-          }
-          case 'tool_result':
-            updateLastAssistant(m => ({
-              ...m,
-              toolCalls: m.toolCalls.map(tc =>
-                tc.id === event.toolUseId
-                  ? { ...tc, status: event.isError ? 'error' : 'done', result: event.result, isError: event.isError }
-                  : tc
-              ),
-            }))
-            break
-          case 'turn_complete':
-            updateLastAssistant(m => ({ ...m, usage: event.usage }))
-            break
-          case 'permission_request':
-            setPermRequest({ requestId: event.requestId, toolName: event.toolName, input: event.input, message: event.message, riskLevel: event.riskLevel })
-            break
-          case 'error':
-            updateLastAssistant(m => ({ ...m, text: m.text + (m.text ? '\n\n' : '') + `⚠ ${event.message || 'Error'}`, isStreaming: false }))
-            break
+      for await (const ev of streamChatFetch(sessionId, text, {}, abortRef.current.signal)) {
+        if (ev.type === 'text_delta') patchLast(m => ({ ...m, text: m.text + ev.text }))
+        else if (ev.type === 'tool_use_start') {
+          const tc: ToolCall = { id: ev.id, name: ev.name, input: ev.input, status: 'running' }
+          patchLast(m => ({ ...m, toolCalls: [...m.toolCalls, tc] }))
+        } else if (ev.type === 'tool_result') {
+          patchLast(m => ({
+            ...m,
+            toolCalls: m.toolCalls.map(tc =>
+              tc.id === ev.toolUseId ? { ...tc, status: ev.isError ? 'error' : 'done', result: ev.result, isError: ev.isError } : tc
+            ),
+          }))
+        } else if (ev.type === 'turn_complete') {
+          patchLast(m => ({ ...m, usage: ev.usage }))
+        } else if (ev.type === 'permission_request') {
+          setPermReq({ requestId: ev.requestId, toolName: ev.toolName, input: ev.input, message: ev.message, riskLevel: ev.riskLevel })
+        } else if (ev.type === 'error') {
+          patchLast(m => ({ ...m, text: m.text + (m.text ? '\n\n' : '') + `⚠ ${ev.message || 'Error'}` }))
         }
       }
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        updateLastAssistant(m => ({ ...m, text: m.text + '\n\n⚠ Connection error' }))
-      }
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') patchLast(m => ({ ...m, text: m.text + '\n\n⚠ Connection error' }))
     } finally {
-      updateLastAssistant(m => ({ ...m, isStreaming: false }))
-      setIsStreaming(false)
+      patchLast(m => ({ ...m, isStreaming: false }))
+      setStreaming(false)
       abortRef.current = null
       if (sessionId) createSession({ sessionId }).then(setSessionInfo)
     }
   }
 
   async function newSession() {
-    const info = await createSession()
-    setSessionId(info.id); setSessionInfo(info); setMessages([])
-    getSessions().then(d => setRecentSessions(d.history || []))
+    const i = await createSession()
+    setSessionId(i.id); setSessionInfo(i); setMessages([])
+    getSessions().then(d => setHistory(d.history || []))
   }
 
   async function resumeSession(sid: string) {
-    const info = await createSession({ resumeSessionId: sid })
-    setSessionId(info.id); setSessionInfo(info)
+    const i = await createSession({ resumeSessionId: sid })
+    setSessionId(i.id); setSessionInfo(i)
     setMessages([{ id: uuid(), role: 'system', text: `resumed ${sid.slice(0, 8)}…`, toolCalls: [], timestamp: Date.now() }])
+    getSessions().then(d => setHistory(d.history || []))
   }
 
-  async function handleCompact() {
+  async function compact() {
     if (!sessionId) return
     const r = await compactSession(sessionId)
-    if (r.ok) {
-      addMessage({ id: uuid(), role: 'system', text: `compacted ${r.preTokens?.toLocaleString()} → ${r.postTokens?.toLocaleString()} tokens`, toolCalls: [], timestamp: Date.now() })
-    }
+    if (r.ok) addMsg({ id: uuid(), role: 'system', text: `compacted — ${r.preTokens?.toLocaleString()} → ${r.postTokens?.toLocaleString()} tokens`, toolCalls: [], timestamp: Date.now() })
   }
 
-  function togglePanel(p: 'sessions' | 'config') {
-    setActivePanel(cur => cur === p ? null : p)
-  }
-
-  const QUICK_PROMPTS = ['list files in src/', 'git status', 'read package.json', '帮我写一个 hello.ts']
+  const tokens = sessionInfo ? sessionInfo.totalInputTokens + sessionInfo.totalOutputTokens : 0
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
-      {/* Sidebar */}
-      <Sidebar
-        sessionId={sessionId}
-        sessionInfo={sessionInfo}
-        recentSessions={recentSessions}
-        onNew={newSession}
-        onResume={resumeSession}
-        onCompact={handleCompact}
-        isStreaming={isStreaming}
-        activePanel={activePanel}
-        onTogglePanel={togglePanel}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg)' }}>
 
-      {/* Config panel (slides in from sidebar) */}
-      {activePanel === 'config' && (
-        <div
-          className="slide-in"
-          style={{
-            width: 300,
-            borderRight: '1px solid var(--border)',
-            background: 'var(--bg-elevated)',
-            display: 'flex',
-            flexDirection: 'column',
-            flexShrink: 0,
-            boxShadow: 'var(--shadow)',
-          }}
-        >
-          <ConfigPanel onClose={() => setActivePanel(null)} />
+      {/* ── header ── */}
+      <header style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 20px', height: 44,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+        flexShrink: 0,
+      }}>
+        {/* left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-.02em', color: 'var(--text)' }}>
+            mini-claude
+          </span>
+          {sessionInfo && (
+            <span style={{
+              fontSize: 11, fontFamily: 'var(--font-geist-mono)',
+              color: 'var(--text-3)',
+              padding: '1px 6px', border: '1px solid var(--border)',
+              borderRadius: 3,
+            }}>
+              {sessionId?.slice(0, 8)}
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Main chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Topbar */}
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 16px',
-            height: 48,
-            borderBottom: '1px solid var(--border)',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {sessionInfo && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: 'var(--font-geist-mono)',
-                  color: 'var(--text-muted)',
-                  padding: '2px 7px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                }}
-              >
-                {sessionInfo.model.split('-').slice(-2).join('-')}
-              </span>
+        {/* center — streaming indicator */}
+        {streaming && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+            {[0, 1, 2].map(i => (
+              <span key={i} style={{
+                width: 4, height: 4, borderRadius: '50%',
+                background: 'var(--text-2)',
+                display: 'inline-block',
+                animation: `dot .9s ease-in-out ${i * .15}s infinite`,
+              }}/>
+            ))}
+          </div>
+        )}
+
+        {/* right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {sessionInfo && tokens > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-3)', marginRight: 4 }}>
+              {tokens.toLocaleString()} tok
+              {sessionInfo.totalCostUSD > 0.0001 && ` · $${sessionInfo.totalCostUSD.toFixed(3)}`}
+            </span>
+          )}
+          {streaming ? (
+            <Btn onClick={() => abortRef.current?.abort()}>Stop</Btn>
+          ) : (
+            <Btn onClick={compact} disabled={!sessionId} title="Compact context">/compact</Btn>
+          )}
+          <div style={{ position: 'relative' }}>
+            <Btn onClick={() => { setShowHistory(v => !v); getSessions().then(d => setHistory(d.history || [])) }} active={showHistory}>
+              <History />
+            </Btn>
+            {showHistory && (
+              <HistoryPopover
+                sessions={history} current={sessionId}
+                onResume={resumeSession}
+                onClose={() => setShowHistory(false)}
+              />
             )}
-            {isStreaming && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ display: 'flex', gap: 3 }}>
-                  {[0, 1, 2].map(i => (
-                    <span
-                      key={i}
-                      style={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: '50%',
-                        background: 'var(--text-secondary)',
-                        display: 'inline-block',
-                        animation: `pulse-dot 1s ease-in-out ${i * 0.15}s infinite`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>thinking</span>
+          </div>
+          <Btn onClick={newSession}><Plus /></Btn>
+          <Btn onClick={() => setShowConfig(true)} title="Settings"><Gear /></Btn>
+          <Btn onClick={toggle} title="Toggle theme">
+            {theme === 'dark' ? <Sun /> : <Moon />}
+          </Btn>
+        </div>
+      </header>
+
+      {/* ── messages ── */}
+      <main style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 8px' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {messages.length === 0 && (
+            <div className="in-up" style={{ textAlign: 'center', marginTop: 72 }}>
+              <div style={{
+                width: 40, height: 40, margin: '0 auto 16px',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--text-2)',
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
               </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {isStreaming && (
-              <button
-                className="btn"
-                onClick={() => abortRef.current?.abort()}
-                style={{ fontSize: 11 }}
-              >
-                Stop
-              </button>
-            )}
-            <button className="btn btn-ghost" onClick={toggle} title="Toggle theme">
-              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-            </button>
-          </div>
-        </header>
-
-        {/* Messages */}
-        <main
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '20px 20px 8px',
-          }}
-        >
-          <div style={{ maxWidth: 700, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {messages.length === 0 && (
-              <div
-                className="fade-up"
-                style={{ textAlign: 'center', marginTop: 60 }}
-              >
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 48,
-                    height: 48,
-                    border: '1px solid var(--border)',
-                    borderRadius: 10,
-                    marginBottom: 16,
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                  </svg>
-                </div>
-                <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-                  mini-claude-code
-                </h2>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-                  AI coding assistant — ask me to read files, write code, run commands
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-                  {QUICK_PROMPTS.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => sendMessage(p)}
-                      className="btn"
-                      style={{ fontFamily: 'var(--font-geist-mono)', fontSize: 11 }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>mini-claude-code</p>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
+                Ask me to read files, write code, run commands
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                {PROMPTS.map(p => (
+                  <Btn key={p} onClick={() => send(p)}>
+                    <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: 11 }}>{p}</span>
+                  </Btn>
+                ))}
               </div>
-            )}
-            {messages.map(msg => <MessageItem key={msg.id} message={msg} />)}
-            <div ref={messagesEndRef} />
-          </div>
-        </main>
-
-        {/* Input */}
-        <footer
-          style={{
-            flexShrink: 0,
-            padding: '10px 20px 14px',
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <div style={{ maxWidth: 700, margin: '0 auto' }}>
-            <ChatInput
-              onSend={sendMessage}
-              disabled={isStreaming || !sessionId}
-            />
-            <div
-              style={{
-                marginTop: 6,
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 12,
-                fontSize: 10,
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-geist-mono)',
-              }}
-            >
-              <span>Enter to send</span>
-              <span>·</span>
-              <span>Shift+Enter for newline</span>
-              <span>·</span>
-              <span>{process.env.NEXT_PUBLIC_API_URL || 'localhost:3001'}</span>
             </div>
-          </div>
-        </footer>
-      </div>
+          )}
 
-      {/* Permission dialog */}
-      {permRequest && (
-        <PermissionDialog request={permRequest} onResolved={() => setPermRequest(null)} />
-      )}
+          {messages.map(m => <MessageItem key={m.id} message={m} />)}
+          <div ref={bottomRef} />
+        </div>
+      </main>
+
+      {/* ── input ── */}
+      <footer style={{
+        flexShrink: 0, padding: '10px 20px 16px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--surface)',
+      }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <ChatInput onSend={send} disabled={streaming || !sessionId} />
+          <p style={{
+            marginTop: 6, textAlign: 'center',
+            fontSize: 10, color: 'var(--text-3)',
+            fontFamily: 'var(--font-geist-mono)',
+          }}>
+            Enter · Shift+Enter newline
+          </p>
+        </div>
+      </footer>
+
+      {permReq && <PermissionDialog request={permReq} onResolved={() => setPermReq(null)} />}
+      {showConfig && <ConfigModal onClose={() => setShowConfig(false)} />}
     </div>
   )
 }

@@ -3,123 +3,58 @@
 import type { ChatMessage } from '@/lib/types'
 import ToolCallCard from './ToolCallCard'
 
-interface Props { message: ChatMessage }
+export default function MessageItem({ message: m }: { message: ChatMessage }) {
+  const isUser   = m.role === 'user'
+  const isSystem = m.role === 'system'
 
-export default function MessageItem({ message }: Props) {
-  const isUser = message.role === 'user'
-  const isSystem = message.role === 'system'
-
-  if (isSystem) {
-    return (
-      <div className="fade-up" style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            padding: '3px 12px',
-            border: '1px solid var(--border)',
-            borderRadius: 20,
-            background: 'var(--bg-elevated)',
-          }}
-        >
-          {message.text}
-        </span>
-      </div>
-    )
-  }
+  if (isSystem) return (
+    <div className="in-up" style={{ display: 'flex', justifyContent: 'center' }}>
+      <span style={{
+        fontSize: 11, color: 'var(--text-3)',
+        padding: '2px 10px',
+        border: '1px solid var(--border)', borderRadius: 20,
+      }}>
+        {m.text}
+      </span>
+    </div>
+  )
 
   return (
-    <div
-      className="fade-up"
-      style={{
-        display: 'flex',
-        gap: 10,
-        flexDirection: isUser ? 'row-reverse' : 'row',
-        alignItems: 'flex-start',
-      }}
-    >
-      {/* Avatar */}
-      <div
-        className="mono"
-        style={{
-          width: 26,
-          height: 26,
-          border: '1px solid var(--border)',
-          borderRadius: 4,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 10,
-          color: 'var(--text-secondary)',
-          flexShrink: 0,
-          marginTop: 2,
-          background: 'var(--bg-elevated)',
-          letterSpacing: '-0.02em',
-        }}
-      >
+    <div className="in-up" style={{ display: 'flex', gap: 10, flexDirection: isUser ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
+      {/* avatar */}
+      <div style={{
+        width: 24, height: 24, flexShrink: 0, marginTop: 3,
+        border: '1px solid var(--border)', borderRadius: 4,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 9, fontFamily: 'var(--font-geist-mono)', color: 'var(--text-3)',
+        background: 'var(--surface)',
+      }}>
         {isUser ? 'you' : 'ai'}
       </div>
 
-      {/* Content */}
-      <div
-        style={{
-          maxWidth: '78%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          alignItems: isUser ? 'flex-end' : 'flex-start',
-        }}
-      >
-        {/* Text bubble */}
-        {(message.text || message.isStreaming) && (
-          <div
-            style={{
-              padding: '9px 13px',
-              borderRadius: isUser ? '8px 2px 8px 8px' : '2px 8px 8px 8px',
-              fontSize: 14,
-              lineHeight: 1.65,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              ...(isUser
-                ? {
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text)',
-                    boxShadow: 'var(--shadow-sm)',
-                  }
-                : {
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    padding: '2px 0',
-                  }),
-            }}
-          >
-            {message.text}
-            {message.isStreaming && <span className="cursor-blink" />}
+      {/* content */}
+      <div style={{ maxWidth: '76%', display: 'flex', flexDirection: 'column', gap: 5, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+        {(m.text || m.isStreaming) && (
+          <div style={{
+            fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            ...(isUser
+              ? { padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px 2px 8px 8px', boxShadow: 'var(--shadow)', color: 'var(--text)' }
+              : { color: 'var(--text)' }),
+          }}>
+            {m.text}
+            {m.isStreaming && <span className="cursor"/>}
           </div>
         )}
 
-        {/* Tool calls */}
-        {message.toolCalls.length > 0 && (
-          <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {message.toolCalls.map(tc => (
-              <ToolCallCard key={tc.id} call={tc} />
-            ))}
+        {m.toolCalls.length > 0 && (
+          <div style={{ width: '100%', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {m.toolCalls.map(tc => <ToolCallCard key={tc.id} call={tc} />)}
           </div>
         )}
 
-        {/* Token usage */}
-        {message.usage && !message.isStreaming && (
-          <div
-            className="mono"
-            style={{
-              fontSize: 10,
-              color: 'var(--text-muted)',
-              padding: '0 2px',
-            }}
-          >
-            {message.usage.inputTokens.toLocaleString()}↑ {message.usage.outputTokens.toLocaleString()}↓
+        {m.usage && !m.isStreaming && (
+          <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono)' }}>
+            {m.usage.inputTokens.toLocaleString()}↑ {m.usage.outputTokens.toLocaleString()}↓
           </div>
         )}
       </div>

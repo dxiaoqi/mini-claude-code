@@ -3,120 +3,46 @@
 import { respondPermission } from '@/lib/api'
 import type { PermissionRequest } from '@/lib/types'
 
-interface Props {
-  request: PermissionRequest
-  onResolved: () => void
-}
-
-export default function PermissionDialog({ request, onResolved }: Props) {
-  async function respond(decision: 'allow' | 'allow_always' | 'deny') {
-    await respondPermission(request.requestId, decision)
-    onResolved()
+export default function PermissionDialog({ request: r, onResolved }: { request: PermissionRequest; onResolved: () => void }) {
+  async function respond(d: 'allow' | 'allow_always' | 'deny') {
+    await respondPermission(r.requestId, d); onResolved()
   }
 
-  return (
-    <div
+  const btn = (label: string, d: 'allow' | 'allow_always' | 'deny', primary?: boolean) => (
+    <button
+      onClick={() => respond(d)}
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0,0,0,0.5)',
-        backdropFilter: 'blur(4px)',
+        flex: 1, padding: '7px 0', fontSize: 12, fontWeight: primary ? 500 : 400,
+        border: '1px solid var(--border)', borderRadius: 5,
+        background: primary ? 'var(--text)' : 'transparent',
+        color: primary ? 'var(--bg)' : 'var(--text-2)',
+        cursor: 'pointer', transition: 'opacity .12s',
       }}
+      onMouseEnter={e => (e.currentTarget.style.opacity = '.8')}
+      onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
     >
-      <div
-        className="fade-up card"
-        style={{
-          padding: 20,
-          maxWidth: 440,
-          width: '100%',
-          margin: '0 16px',
-          boxShadow: 'var(--shadow-lg)',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
-              style={{ color: 'var(--text-secondary)' }}>
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
-              Permission required
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-              <code style={{ fontFamily: 'var(--font-geist-mono)', background: 'var(--bg-hover)', padding: '1px 5px', borderRadius: 3 }}>
-                {request.toolName}
-              </code>
-              {' · '}
-              <span style={{ color: request.riskLevel === 'high' ? '#cc6666' : request.riskLevel === 'medium' ? '#aa8844' : 'var(--text-muted)' }}>
-                {request.riskLevel} risk
-              </span>
-            </div>
-          </div>
+      {label}
+    </button>
+  )
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(3px)' }}>
+      <div className="in-up" style={{ width: 400, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', padding: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>Permission required</div>
+        <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 12 }}>
+          <code style={{ fontFamily: 'var(--font-geist-mono)', background: 'var(--bg)', padding: '1px 5px', borderRadius: 3 }}>{r.toolName}</code>
+          {' · '}<span style={{ color: r.riskLevel === 'high' ? 'rgba(200,70,70,1)' : 'var(--text-3)' }}>{r.riskLevel} risk</span>
         </div>
-
-        {request.message && (
-          <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.6 }}>
-            {request.message}
-          </p>
-        )}
-
-        {Object.keys(request.input).length > 0 && (
-          <pre
-            className="mono"
-            style={{
-              fontSize: 11,
-              color: 'var(--text)',
-              background: 'var(--bg)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '8px 10px',
-              marginBottom: 14,
-              overflow: 'auto',
-              maxHeight: 120,
-              margin: '0 0 14px',
-            }}
-          >
-            {JSON.stringify(request.input, null, 2)}
+        {r.message && <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.55 }}>{r.message}</p>}
+        {Object.keys(r.input).length > 0 && (
+          <pre style={{ fontSize: 11, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 5, padding: '7px 9px', marginBottom: 14, overflow: 'auto', maxHeight: 110, fontFamily: 'var(--font-geist-mono)' }}>
+            {JSON.stringify(r.input, null, 2)}
           </pre>
         )}
-
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn" onClick={() => respond('deny')} style={{ flex: 1, justifyContent: 'center' }}>
-            Deny
-          </button>
-          <button
-            className="btn"
-            onClick={() => respond('allow')}
-            style={{ flex: 1, justifyContent: 'center', borderColor: 'var(--border-focus)', color: 'var(--text)' }}
-          >
-            Allow
-          </button>
-          <button
-            className="btn"
-            onClick={() => respond('allow_always')}
-            style={{ flex: 1, justifyContent: 'center' }}
-          >
-            Always
-          </button>
+          {btn('Deny', 'deny')}
+          {btn('Allow once', 'allow', true)}
+          {btn('Always allow', 'allow_always')}
         </div>
       </div>
     </div>
