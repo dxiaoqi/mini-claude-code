@@ -1,0 +1,32 @@
+{
+  "exportedAt": "2026-04-20T01:54:18.586Z",
+  "appVersion": "visual-v2",
+  "messageCount": 2,
+  "summary": {
+    "userMessages": 1,
+    "assistantMessages": 1,
+    "visualV2Messages": 0,
+    "legacyWidgetMessages": 0,
+    "conversationalMessages": 1
+  },
+  "messages": [
+    {
+      "index": 0,
+      "id": "msg_1",
+      "role": "user",
+      "timestamp": 1776649959902,
+      "timestampHuman": "2026-04-20T01:52:39.902Z",
+      "content": "帮我绘制一下当前项目的架构图",
+      "protocol": "conversational"
+    },
+    {
+      "index": 1,
+      "id": "msg_2",
+      "role": "assistant",
+      "timestamp": 1776649959902,
+      "timestampHuman": "2026-04-20T01:52:39.902Z",
+      "content": null,
+      "protocol": "conversational"
+    }
+  ]
+}

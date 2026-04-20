@@ -201,6 +201,60 @@ export type StreamEvent =
   | { type: 'session_complete'; reason: string }
 
 // ────────────────────────────────────────────
+//  Unified UI Events (SSE wire format)
+//  Naming: namespace.verb, dot-separated, present tense.
+//  Used by HttpServerAdapter when emitting SSE to frontend.
+// ────────────────────────────────────────────
+
+export type UIEvent =
+  // ── Text / Think streaming ──
+  | { type: 'text.delta'; text: string }
+  | { type: 'think.start' }
+  | { type: 'think.delta'; text: string }
+  | { type: 'think.end' }
+  // ── Tools ──
+  | { type: 'tool.start'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool.delta'; id: string; partialInput: string }
+  | { type: 'tool.result'; toolName: string; toolUseId: string; result: unknown; isError?: boolean }
+  // ── Message lifecycle ──
+  | { type: 'message.start'; messageId: string; model: string }
+  | { type: 'message.end'; usage: Usage; stopReason: string }
+  | { type: 'turn.complete'; turnCount?: number; usage?: Usage; artifactId?: string }
+  | { type: 'session.complete'; reason: string }
+  | { type: 'session.end'; sessionId?: string }
+  | { type: 'done'; sessionId?: string }
+  // ── Agent coordination ──
+  | { type: 'agent.spawn'; agentId: string; prompt: string }
+  | { type: 'agent.complete'; agentId: string; result: string; usage: Usage }
+  // ── Permission ──
+  | { type: 'permission.request'; requestId: string; toolName: string; input: Record<string, unknown>; message: string; riskLevel: string }
+  // ── Error / Status ──
+  | { type: 'error.occurred'; message: string }
+  | { type: 'status'; message: string }
+  // ── Visual mode — Conversational ──
+  | { type: 'conversational.reply'; text: string; done: boolean; full?: string }
+  // ── Visual mode — Plan / Phase ──
+  | { type: 'plan.create'; plan: Record<string, unknown> }
+  | { type: 'plan.complete'; artifactId?: string; widgetCount?: number }
+  | { type: 'phase.start'; id: string; goal?: string }
+  | { type: 'phase.complete'; id: string }
+  | { type: 'phase.abandon'; id: string }
+  | { type: 'phase.transition'; phaseId?: string; message?: string }
+  | { type: 'critic.thinking'; phaseId?: string }
+  | { type: 'milestone'; phaseId?: string }
+  | { type: 'hil.requested'; question?: string; phaseId?: string }
+  // ── Visual mode — Widget ──
+  | { type: 'widget.open'; id: string; widgetType?: string; title?: string }
+  | { type: 'widget.delta'; id: string; text: string }
+  | { type: 'widget.close'; id: string; partial?: boolean }
+  // ── Visual mode — Blocks ──
+  | { type: 'block.text_start'; blockId?: string }
+  | { type: 'block.text_delta'; text: string }
+  | { type: 'block.text_end' }
+  | { type: 'block.visual_start'; blockId?: string; visualType?: string }
+  | { type: 'block.visual'; blockId?: string; visualType?: string; content?: string }
+
+// ────────────────────────────────────────────
 //  Session State
 // ────────────────────────────────────────────
 
@@ -241,6 +295,11 @@ export interface Settings {
   }
   /** Logger instance for structured logging */
   logger?: unknown
+  /**
+   * 由 UI 注入的额外 system prompt 内容（追加在静态区末尾）。
+   * 用于 Artifacts 模式向 agent 注入 visual-protocol 等引导词。
+   */
+  systemPromptAddendum?: string
   /**
    * 开发模式 trace：启用后将完整会话事件流（消息、工具调用、token 用量等）
    * 写入 ~/.mini-claude/projects/<hash>/<sessionId>.trace.jsonl，用于评测与迭代。

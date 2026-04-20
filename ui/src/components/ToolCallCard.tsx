@@ -1,116 +1,136 @@
 'use client'
 
 import { useState } from 'react'
-import type { ToolCall } from '@/lib/types'
+import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, Wrench } from 'lucide-react'
 
-const ABBR: Record<string, string> = {
-  Bash: 'bash', FileRead: 'read', FileEdit: 'edit', FileWrite: 'write',
-  Glob: 'glob', Grep: 'grep', WebFetch: 'fetch', WebSearch: 'search',
-  Agent: 'agent', TodoWrite: 'todo', AskUser: 'ask',
+export interface ToolCallItem {
+  id: string
+  name: string
+  input: Record<string, unknown>
+  status: 'running' | 'done' | 'error'
+  result?: unknown
+  isError?: boolean
 }
 
-function inputSummary(name: string, input: Record<string, unknown>) {
-  if (name === 'Bash') return String(input.command || '').slice(0, 72)
-  const p = input.file_path || input.path || input.notebook_path
-  if (p) return String(p).replace(/.*\//, '').slice(0, 60)
-  if (name === 'Glob') return String(input.pattern || input.glob_pattern || '')
-  if (name === 'Grep') return String(input.pattern || '').slice(0, 60)
-  if (name === 'WebFetch') return String(input.url || '').replace(/^https?:\/\//, '').slice(0, 60)
-  const vals = Object.values(input)
-  return vals.length ? String(vals[0]).slice(0, 60) : ''
+interface Props {
+  toolCall: ToolCallItem
 }
 
-export default function ToolCallCard({ call: c }: { call: ToolCall }) {
-  const [open, setOpen] = useState(false)
-  const label   = ABBR[c.name] || c.name.toLowerCase()
-  const summary = inputSummary(c.name, c.input)
-  const result  = c.result ? (typeof c.result === 'string' ? c.result : JSON.stringify(c.result, null, 2)) : null
-  const running = c.status === 'running'
-  const error   = c.status === 'error'
+export function ToolCallCard({ toolCall }: Props) {
+  const [expanded, setExpanded] = useState(false)
+
+  const isDone = toolCall.status === 'done' || toolCall.status === 'error'
+  const isError = toolCall.isError || toolCall.status === 'error'
+
+  const inputStr = (() => {
+    try { return JSON.stringify(toolCall.input, null, 2) } catch { return String(toolCall.input) }
+  })()
+
+  const resultStr = (() => {
+    if (toolCall.result === undefined) return ''
+    if (typeof toolCall.result === 'string') {
+      return toolCall.result.length > 400
+        ? toolCall.result.slice(0, 400) + '…'
+        : toolCall.result
+    }
+    try { return JSON.stringify(toolCall.result, null, 2) } catch { return String(toolCall.result) }
+  })()
 
   return (
     <div style={{
-      border: `1px solid ${error ? 'rgba(150,50,50,.22)' : 'var(--border)'}`,
-      borderRadius: 8,
-      background: 'var(--surface-2)',
+      borderBottom: `0.5px solid var(--border-default)`,
+      background: 'var(--bg-secondary)',
       overflow: 'hidden',
     }}>
-      <button onClick={() => setOpen(v => !v)} style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        width: '100%', padding: '6px 10px',
-        background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', textAlign: 'left',
-      }}>
-        {/* tool name — label style */}
-        <span className="label" style={{
-          padding: '1px 5px',
-          border: '1px solid var(--border-2)',
-          borderRadius: 2,
-          background: 'var(--bg)',
-          flexShrink: 0,
-        }}>
-          {label}
+      {/* Header row */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '7px 10px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        {/* Status icon */}
+        {!isDone
+          ? <Loader2 width={12} height={12} style={{ color: 'var(--accent)', animation: 'spin-accent 0.7s linear infinite', flexShrink: 0 }} />
+          : isError
+            ? <AlertCircle width={12} height={12} style={{ color: '#ef4444', flexShrink: 0 }} />
+            : <Check width={12} height={12} style={{ color: 'var(--success, #22c55e)', flexShrink: 0 }} />
+        }
+
+        {/* Tool icon + name */}
+        <Wrench width={11} height={11} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+        <span style={{ fontSize: '11.5px', fontWeight: 500, color: 'var(--text-secondary)', flex: 1, fontFamily: 'var(--font-mono)' }}>
+          {toolCall.name}
         </span>
 
-        {/* summary */}
-        <span style={{
-          fontSize: 11, fontFamily: 'var(--font-geist-mono)',
-          color: 'var(--text)', flex: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {summary}
+        {/* Status text */}
+        <span style={{ fontSize: '10.5px', color: isError ? '#ef4444' : isDone ? 'var(--text-tertiary)' : 'var(--accent)' }}>
+          {!isDone ? '运行中…' : isError ? '失败' : '完成'}
         </span>
 
-        {/* status */}
-        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {running ? (
-            <span style={{ display: 'flex', gap: 2 }}>
-              {[0,1,2].map(i => (
-                <span key={i} style={{
-                  width: 2.5, height: 2.5, borderRadius: '50%', background: 'var(--text-2)',
-                  display: 'inline-block',
-                  animation: `dot .9s ease-in-out ${i*.14}s infinite`,
-                }}/>
-              ))}
-            </span>
-          ) : (
-            <span className="label" style={{ color: error ? 'rgba(160,60,60,.8)' : 'var(--text-2)' }}>
-              {error ? 'err' : 'ok'}
-            </span>
-          )}
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            style={{ color: 'var(--text-2)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .12s' }}>
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </span>
+        {/* Expand chevron */}
+        {expanded
+          ? <ChevronDown width={11} height={11} style={{ color: 'var(--text-disabled)', flexShrink: 0 }} />
+          : <ChevronRight width={11} height={11} style={{ color: 'var(--text-disabled)', flexShrink: 0 }} />
+        }
       </button>
 
-      {open && (
-        <div style={{ borderTop: '1px solid var(--border)' }}>
-          <div style={{ padding: '8px 10px' }}>
-            <div className="label" style={{ marginBottom: 4 }}>Input</div>
-            <pre style={{
-              fontSize: 11, fontFamily: 'var(--font-geist-mono)',
-              color: 'var(--text)',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-              maxHeight: 130, overflow: 'auto', margin: 0,
-            }}>
-              {JSON.stringify(c.input, null, 2)}
-            </pre>
-          </div>
-          {result && (
-            <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-              <div className="label" style={{ marginBottom: 4, color: error ? 'rgba(160,60,60,.7)' : undefined }}>
-                {error ? 'Error' : 'Output'}
-              </div>
+      {/* Expanded content */}
+      {expanded && (
+        <div style={{ borderTop: '0.5px solid var(--border-default)', padding: '8px 10px' }}>
+          {/* Input */}
+          <p style={{ fontSize: '10px', color: 'var(--text-disabled)', marginBottom: 4, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            输入
+          </p>
+          <pre style={{
+            fontSize: '11px',
+            color: 'var(--text-tertiary)',
+            background: 'var(--bg-primary)',
+            border: '0.5px solid var(--border-default)',
+            borderRadius: 'var(--radius-sm, 4px)',
+            padding: '6px 8px',
+            overflowX: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            marginBottom: resultStr ? 10 : 0,
+            fontFamily: 'var(--font-mono)',
+            maxHeight: 200,
+            overflowY: 'auto',
+          }}>
+            {inputStr}
+          </pre>
+
+          {/* Result */}
+          {resultStr && (
+            <>
+              <p style={{ fontSize: '10px', color: 'var(--text-disabled)', marginBottom: 4, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                结果
+              </p>
               <pre style={{
-                fontSize: 11, fontFamily: 'var(--font-geist-mono)',
-                color: error ? 'rgba(190,60,60,1)' : 'var(--text)',
-                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                maxHeight: 200, overflow: 'auto', margin: 0,
+                fontSize: '11px',
+                color: isError ? '#ef4444' : 'var(--text-tertiary)',
+                background: 'var(--bg-primary)',
+                border: `0.5px solid ${isError ? 'rgba(239,68,68,0.3)' : 'var(--border-default)'}`,
+                borderRadius: 'var(--radius-sm, 4px)',
+                padding: '6px 8px',
+                overflowX: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                fontFamily: 'var(--font-mono)',
+                maxHeight: 200,
+                overflowY: 'auto',
               }}>
-                {result.slice(0, 3000)}{result.length > 3000 ? '\n// …truncated' : ''}
+                {resultStr}
               </pre>
-            </div>
+            </>
           )}
         </div>
       )}

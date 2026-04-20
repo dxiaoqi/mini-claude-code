@@ -10,9 +10,10 @@
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsc && node scripts/postbuild.js",
-    "build:web": "cd ui && npm run build && cp -r out ../web-dist",
-    "dev:web": "cd ui && npm run dev -- --port 3002",
-    "ui": "cd ui && npm run dev -- --port 3002",
+    "build:web": "cd ui && npm run build && cp -r .next/out ../web-dist 2>/dev/null || cp -r out ../web-dist 2>/dev/null || true",
+    "dev:web": "concurrently --names \"backend,ui\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts --serve --port 3001\" \"cd ui && npm run dev -- --port 3000\"",
+    "tui": "concurrently --names \"backend,ui\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts --serve --port 3001\" \"cd ui && npm run dev -- --port 3000\"",
+    "ui": "cd ui && npm run dev -- --port 3000",
     "typecheck": "tsc --noEmit",
     "link-global": "npm link",
     "test": "vitest",
@@ -54,6 +55,7 @@
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^1.6.1",
     "@vitest/ui": "^1.6.1",
+    "concurrently": "^9.2.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^1.6.1"

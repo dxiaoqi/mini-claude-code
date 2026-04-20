@@ -383,8 +383,9 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       process.exit(1)
     }
 
+    const uiPort = 3000
     const corsOrigin = (options.corsOrigin as string) || process.env.CORS_ORIGIN
-      || (isTui ? `http://${host}:${port}` : `http://${host}:3002`)
+      || (isTui ? `http://${host}:${uiPort}` : `http://${host}:3002`)
 
     // 静态文件目录
     const { resolve: resolvePath } = await import('node:path')
@@ -417,14 +418,38 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       await mcpManager.disconnectAll()
       process.exit(0)
     })
+    // Note: UI child process (if started by --tui) is killed via process.on('exit') registered after spawn
 
     await server.start()
 
-    // --tui: 自动打开浏览器
+    // --tui: 同时启动 ui/ Next.js 开发服务器，并打开浏览器
     if (isTui) {
-      const url = `http://${host}:${port}`
-      console.log(chalk.cyan(`\n🌐 Opening browser: ${url}`))
-      await openBrowser(url)
+      const { spawn } = await import('node:child_process')
+      const { resolve: resolvePath2 } = await import('node:path')
+      const { fileURLToPath: fu2 } = await import('node:url')
+      const __dir2 = resolvePath2(fu2(import.meta.url), '..')
+      const uiDir = resolvePath2(__dir2, '..', 'ui')
+
+      console.log(chalk.cyan(`\n🖥  Starting UI dev server (port ${uiPort})…`))
+      const uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
+        cwd: uiDir,
+        stdio: 'inherit',
+        shell: true,
+      })
+
+      uiProc.on('error', (err) => {
+        console.error(chalk.yellow(`⚠ UI process error: ${err.message}`))
+      })
+
+      // Kill UI process when backend shuts down
+      process.on('exit', () => uiProc.kill())
+
+      // Wait a moment for Next.js to start, then open browser
+      const uiUrl = `http://${host}:${uiPort}`
+      setTimeout(async () => {
+        console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
+        await openBrowser(uiUrl)
+      }, 4000)
     }
 
     return  // 保持进程运行

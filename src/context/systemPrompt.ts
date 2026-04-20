@@ -192,6 +192,11 @@ export async function buildSystemPrompt(
     )
   }
 
+  // UI 注入的额外内容（Artifacts 模式注入 visual-protocol 等）
+  if (state.settings.systemPromptAddendum) {
+    staticParts.push(`\n---\n${state.settings.systemPromptAddendum}`)
+  }
+
   blocks.push({
     text: staticParts.join('\n\n'),
     cacheScope: 'global',

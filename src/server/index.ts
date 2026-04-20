@@ -250,7 +250,12 @@ export function createMiniClaudeServer(config: ServerConfig) {
 
     // ── POST /api/sessions ──
     if (method === 'POST' && path === '/api/sessions') {
-      const body = await readBody(req) as { sessionId?: string; model?: string; resumeSessionId?: string }
+      const body = await readBody(req) as {
+        sessionId?: string
+        model?: string
+        resumeSessionId?: string
+        systemPromptAddendum?: string
+      }
 
       let entry: SessionEntry
 
@@ -270,6 +275,12 @@ export function createMiniClaudeServer(config: ServerConfig) {
 
       if (body.model) {
         entry.state.model = body.model
+      }
+
+      if (body.systemPromptAddendum) {
+        entry.state.settings.systemPromptAddendum = body.systemPromptAddendum
+        // clear cache so the new addendum takes effect on next turn
+        entry.state.systemPromptSectionCache.clear()
       }
 
       json(res, { session: sessionToInfo(entry) })
@@ -383,17 +394,46 @@ export function createMiniClaudeServer(config: ServerConfig) {
         )
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)
-        // 直接写 SSE，避免 Error 对象 JSON 序列化为空 {}
         if (!res.writableEnded) {
-          res.write(`event: error\ndata: ${JSON.stringify({ message: errMsg })}\n\n`)
+          res.write(`data: ${JSON.stringify({ type: 'error.occurred', message: errMsg })}\n\n`)
         }
         console.error('[chat error]', errMsg)
       } finally {
         entry.lastActiveAt = new Date()
         if (!res.writableEnded) {
-          res.write(`event: done\ndata: {"sessionId":"${sessionId}"}\n\n`)
+          res.write(`data: ${JSON.stringify({ type: 'done', sessionId })}\n\n`)
           res.end()
         }
+      }
+      return
+    }
+
+    // ── POST /api/artifacts/save  (save visual block to .mini-claude/artifacts/) ──
+    if (method === 'POST' && path === '/api/artifacts/save') {
+      try {
+        const body = await readBody(req) as {
+          sessionId?: string
+          visualType: 'svg' | 'html' | 'threejs'
+          content: string
+          title?: string
+        }
+        if (!body.content) return json(res, { ok: false, error: 'content required' }, 400)
+
+        const { mkdir: mkdirFn, writeFile: writeFn } = await import('node:fs/promises')
+        const { resolve: resolvePath } = await import('node:path')
+        const artifactsDir = resolvePath(config.cwd, '.mini-claude', 'artifacts')
+        await mkdirFn(artifactsDir, { recursive: true })
+
+        const ext = body.visualType === 'svg' ? 'svg' : 'html'
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+        const slug = (body.title || 'visual').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '-').slice(0, 30)
+        const fileName = `${ts}-${slug}.${ext}`
+        const filePath = resolvePath(artifactsDir, fileName)
+
+        await writeFn(filePath, body.content, 'utf-8')
+        json(res, { ok: true, path: filePath, fileName })
+      } catch (err) {
+        json(res, { ok: false, error: (err as Error).message }, 500)
       }
       return
     }
@@ -515,11 +555,7 @@ function createSessionAdapter(
     // no-op：tool_result 已通过 onStreamEvent 转发（含真实 toolUseId）
     onToolEnd(_toolName, _result) {},
     onError(error) {
-      // 直接写 SSE 原始帧，避免 Error 对象 JSON 序列化为空 {}
-      const conn = (httpAdapter as unknown as { connections: Map<string, { res: import('node:http').ServerResponse }> }).connections.get(sessionId)
-      if (conn && !conn.res.writableEnded) {
-        conn.res.write(`event: error\ndata: ${JSON.stringify({ message: error.message })}\n\n`)
-      }
+      httpAdapter.sendUIEvent(sessionId, { type: 'error.occurred', message: error.message })
     },
     async *getUserInput() { /* not used in server mode */ },
     requestPermission(request) {
