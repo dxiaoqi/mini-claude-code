@@ -13,16 +13,31 @@
 
 ## 安装
 
+### 方式一：npm 全局安装（推荐）
+
+```bash
+npm install -g lumi
+```
+
+安装完成后直接使用：
+
+```bash
+lumi --tui     # 启动 Web UI
+lumi           # 终端交互模式
+```
+
+### 方式二：从源码安装（开发 / 贡献）
+
 ```bash
 # 1. 克隆并安装依赖
-git clone <repo>
-cd /lumi
+git clone https://github.com/dxiaoqi/lumi
+cd lumi
 npm install
 
 # 2. 安装 Web UI 依赖
 cd ui && npm install && cd ..
 
-# 3. 全局注册 CLI（可选）
+# 3. 全局注册 CLI
 npm run link-global   # 之后可直接使用 lumi 命令
 ```
 
