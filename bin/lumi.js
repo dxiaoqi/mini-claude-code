@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * mini-claude — global CLI entry point
+ * lumi — global CLI entry point
  * 
  * Dev mode:  runs tsx src/cli.ts (auto-detected when dist/ doesn't exist)
  * Prod mode: runs dist/cli.js (after npm run build)

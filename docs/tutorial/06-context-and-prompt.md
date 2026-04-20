@@ -89,7 +89,7 @@ if (!provider.cacheBreak) {
 ### 1. 身份定义：通用而非品牌
 
 ```
-❌ "You are Mini Claude Code, an AI coding assistant"
+❌ "You are Lumi, an AI coding assistant"
 ✅ "You are an interactive CLI agent that helps users with software engineering tasks"
 ```
 

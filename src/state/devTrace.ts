@@ -4,7 +4,7 @@
  * 在开发模式下（--dev flag 或 settings.devTrace: true）将完整的会话事件流
  * 以 JSONL 格式追加写入：
  *
- *   ~/.mini-claude/projects/<hash>/<sessionId>.trace.jsonl
+ *   ~/.lumi/projects/<hash>/<sessionId>.trace.jsonl
  *
  * 每行为一个 JSON 对象，记录内容：
  *   session_start / session_end     — 会话元数据
@@ -96,7 +96,7 @@ function simpleHash(str: string): string {
 function getDevTracePath(projectRoot: string, sessionId: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.mini-claude', 'projects', hash, `${sessionId}.trace.jsonl`)
+  return resolve(homeDir, '.lumi', 'projects', hash, `${sessionId}.trace.jsonl`)
 }
 
 // ─── 记录器 ────────────────────────────────────────────────────────────────────

@@ -189,7 +189,7 @@ export interface Session {
 
 // ─── Unified UI Events (Server → Client, wire format) ─────────────────────────
 // Naming: namespace.verb, dot-separated, present tense.
-// Mirrors mini-claude-code UIEvent type.
+// Mirrors /lumi UIEvent type.
 
 export type UIEventType =
   // ── Agent mode ──

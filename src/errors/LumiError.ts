@@ -1,14 +1,14 @@
 /**
- * MiniClaudeError - Base Error Class
+ * LumiError - Base Error Class
  *
- * Base class for all custom errors in mini-claude-code.
+ * Base class for all custom errors in /lumi.
  */
 import { ErrorCategory } from './types.js'
 import type { ErrorContext, SuggestedAction, ErrorMetadata } from './types.js'
 export { ErrorCategory } from './types.js'
 export type { ErrorContext, SuggestedAction, ErrorMetadata } from './types.js'
 
-export class MiniClaudeError extends Error {
+export class LumiError extends Error {
   public readonly category: ErrorCategory
   public readonly context: ErrorContext
   public readonly suggestedActions: SuggestedAction[]

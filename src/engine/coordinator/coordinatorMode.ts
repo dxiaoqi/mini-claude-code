@@ -53,7 +53,7 @@ export async function* runCoordinatorMode(
   config: CoordinatorConfig,
 ): AsyncGenerator<StreamEvent, AgentLoopResult> {
   // Create scratchpad directory for cross-worker communication
-  const scratchpadDir = await mkdtemp(join(tmpdir(), 'mini-claude-scratchpad-'))
+  const scratchpadDir = await mkdtemp(join(tmpdir(), 'lumi-scratchpad-'))
 
   // Build coordinator-specific system prompt
   const coordinatorSystemPrompt = getCoordinatorSystemPrompt()
@@ -166,6 +166,6 @@ function escapeXml(str: string): string {
  * Detect if the current session should use coordinator mode.
  */
 export function isCoordinatorMode(): boolean {
-  return process.env.MINI_CLAUDE_COORDINATOR === '1' ||
-    process.env.MINI_CLAUDE_COORDINATOR === 'true'
+  return process.env.LUMI_COORDINATOR === '1' ||
+    process.env.LUMI_COORDINATOR === 'true'
 }

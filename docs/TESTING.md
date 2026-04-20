@@ -1,4 +1,4 @@
-# Mini Claude Code — 功能测试说明
+# Lumi — 功能测试说明
 
 > 以下测试用例覆盖所有已实现的功能模块。
 > 环境变量设置：
@@ -52,9 +52,9 @@ echo '创建文件 test-output/hello.txt，内容为 "Hello World"' | npx tsx sr
 # 验证：cat test-output/hello.txt
 
 # 精确编辑
-echo '用 FileEdit 把 test-output/hello.txt 里的 "World" 替换成 "Mini Claude"' | npx tsx src/cli.ts -p
+echo '用 FileEdit 把 test-output/hello.txt 里的 "World" 替换成 "Lumi"' | npx tsx src/cli.ts -p
 # 预期：精确替换成功
-# 验证：cat test-output/hello.txt → "Hello Mini Claude"
+# 验证：cat test-output/hello.txt → "Hello Lumi"
 
 # 清理
 rm -rf test-output/
@@ -118,8 +118,8 @@ echo "创建一个3步的 TODO 列表来初始化 Node.js 项目" | npx tsx src/
 
 ```bash
 # 创建测试 skill
-mkdir -p .mini-claude/skills
-cat > .mini-claude/skills/greet.md << 'EOF'
+mkdir -p .lumi/skills
+cat > .lumi/skills/greet.md << 'EOF'
 ---
 name: greet
 description: 生成问候语
@@ -137,7 +137,7 @@ echo "执行 greet skill" | npx tsx src/cli.ts -p
 # 预期：通过 Bash 输出问候语
 
 # 清理
-rm -rf .mini-claude/skills
+rm -rf .lumi/skills
 ```
 
 ## 11. AgentTool（子 Agent）
@@ -189,8 +189,8 @@ npx tsx src/cli.ts
 
 ```bash
 # 配置 MCP 服务器
-mkdir -p .mini-claude
-cat > .mini-claude/settings.json << 'EOF'
+mkdir -p .lumi
+cat > .lumi/settings.json << 'EOF'
 {
   "mcpServers": {
     "filesystem": {
@@ -208,7 +208,7 @@ npx tsx src/cli.ts
 # 预期：显示 MCP 提供的工具列表
 
 # 清理
-rm .mini-claude/settings.json
+rm .lumi/settings.json
 ```
 
 ## 16. Coordinator 模式
@@ -267,7 +267,7 @@ FALLBACK_MODEL=claude-3-haiku-20240307 npx tsx src/cli.ts
 npx tsx src/cli.ts
 # 进行一些对话后退出
 
-ls ~/.mini-claude/projects/*/
+ls ~/.lumi/projects/*/
 # 预期：看到 .jsonl 文件
 # 文件内容：每行一个 JSON 对象，包含 timestamp/role/content
 ```

@@ -302,7 +302,7 @@ export interface Settings {
   systemPromptAddendum?: string
   /**
    * 开发模式 trace：启用后将完整会话事件流（消息、工具调用、token 用量等）
-   * 写入 ~/.mini-claude/projects/<hash>/<sessionId>.trace.jsonl，用于评测与迭代。
+   * 写入 ~/.lumi/projects/<hash>/<sessionId>.trace.jsonl，用于评测与迭代。
    * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
    */
   devTrace?: boolean

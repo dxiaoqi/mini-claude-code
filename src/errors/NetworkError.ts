@@ -3,10 +3,10 @@
  *
  * Errors related to network operations and API calls.
  */
-import { MiniClaudeError, ErrorCategory, ErrorContext, SuggestedAction } from './MiniClaudeError.js'
+import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
 import type { ErrorMetadata } from './types.js'
 
-export class NetworkError extends MiniClaudeError {
+export class NetworkError extends LumiError {
   constructor(
     message: string,
     context: ErrorContext = {},
@@ -17,7 +17,7 @@ export class NetworkError extends MiniClaudeError {
     if (statusCode === 401) {
       suggestedActions.push({
         title: 'Check API Key',
-        description: 'Verify your API key is correct in ~/.mini-claude/settings.json',
+        description: 'Verify your API key is correct in ~/.lumi/settings.json',
       })
     } else if (statusCode === 429) {
       suggestedActions.push({

@@ -23,7 +23,7 @@ export class Logger {
 
     const pinoConfig: pino.LoggerOptions = {
       level,
-      name: config.name || 'mini-claude',
+      name: config.name || 'lumi',
       formatters: {
         level: (label) => {
           return { level: label }

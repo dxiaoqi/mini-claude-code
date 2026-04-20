@@ -3,9 +3,9 @@
  *
  * Errors related to tool execution failures.
  */
-import { MiniClaudeError, ErrorCategory, ErrorContext, SuggestedAction } from './MiniClaudeError.js'
+import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
 
-export class ToolExecutionError extends MiniClaudeError {
+export class ToolExecutionError extends LumiError {
   constructor(
     message: string,
     context: ErrorContext = {},

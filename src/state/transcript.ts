@@ -1,7 +1,7 @@
 /**
  * state/transcript.ts — Transcript 持久化
  *
- * 将会话消息以 JSONL 追加写入 ~/.mini-claude/projects 下的会话文件。
+ * 将会话消息以 JSONL 追加写入 ~/.lumi/projects 下的会话文件。
  */
 import { writeFile, mkdir, readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
@@ -10,12 +10,12 @@ import { handleSilentError } from '../errors/handlers.js'
 
 /**
  * Get the transcript directory for a project.
- * ~/.mini-claude/projects/<hash>/
+ * ~/.lumi/projects/<hash>/
  */
 function getTranscriptDir(projectRoot: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.mini-claude', 'projects', hash)
+  return resolve(homeDir, '.lumi', 'projects', hash)
 }
 
 function getTranscriptPath(projectRoot: string, sessionId: string): string {

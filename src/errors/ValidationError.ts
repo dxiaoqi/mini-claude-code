@@ -3,9 +3,9 @@
  *
  * Errors related to input validation and schema violations.
  */
-import { MiniClaudeError, ErrorCategory, ErrorContext, SuggestedAction } from './MiniClaudeError.js'
+import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
 
-export class ValidationError extends MiniClaudeError {
+export class ValidationError extends LumiError {
   constructor(
     message: string,
     context: ErrorContext = {},

@@ -1,7 +1,7 @@
 /**
  * Logging Module
  *
- * Centralized logging system for mini-claude-code.
+ * Centralized logging system for /lumi.
  *
  * Exports:
  * - Logger class for direct instantiation

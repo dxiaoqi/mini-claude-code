@@ -1,7 +1,7 @@
 /**
  * POST /api/chat
  * Streaming SSE endpoint for Visual mode — runs Orchestrator and sends UIEvents.
- * Agent mode connects directly to mini-claude HTTP server (bypasses this route).
+ * Agent mode connects directly to lumi HTTP server (bypasses this route).
  */
 
 import { NextRequest } from 'next/server'

@@ -1,12 +1,12 @@
 /**
  * LLM Client — Visual mode (Orchestrator) LLM calls
- * Reads provider/model/key config from mini-claude-code /api/config at runtime.
+ * Reads provider/model/key config from Lumi's /api/config at runtime.
  * Falls back to ARTIFACTS_LLM_* env vars for standalone development.
  */
 
 import OpenAI from 'openai'
 
-const MINI_CLAUDE_URL = process.env.MINI_CLAUDE_API_URL || process.env.NEXT_PUBLIC_MINI_CLAUDE_URL || 'http://localhost:3001'
+const LUMI_URL = process.env.LUMI_API_URL || process.env.NEXT_PUBLIC_LUMI_URL || 'http://localhost:3001'
 
 interface LLMConfig {
   apiKey: string
@@ -22,7 +22,7 @@ async function getLLMConfig(): Promise<LLMConfig> {
   if (_cachedConfig && Date.now() < _cacheExpiry) return _cachedConfig
 
   try {
-    const res = await fetch(`${MINI_CLAUDE_URL}/api/config`, { signal: AbortSignal.timeout(3000) })
+    const res = await fetch(`${LUMI_URL}/api/config`, { signal: AbortSignal.timeout(3000) })
     if (res.ok) {
       const data = await res.json()
       const api = data.api || {}

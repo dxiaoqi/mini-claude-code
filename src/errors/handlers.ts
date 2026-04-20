@@ -4,7 +4,7 @@
  * Centralized error handling functions for the application.
  */
 import { getLogger } from '../logging/index.js'
-import { MiniClaudeError } from './MiniClaudeError.js'
+import { LumiError } from './LumiError.js'
 import type { ErrorContext } from './types.js'
 import { ValidationError } from './ValidationError.js'
 import { ConfigurationError } from './ConfigurationError.js'
@@ -16,8 +16,8 @@ import { NetworkError } from './NetworkError.js'
 export function handleError(error: unknown, context: ErrorContext = {}): never {
   const logger = getLogger()
 
-  // Convert to MiniClaudeError if needed
-  const normalizedError: MiniClaudeError = error instanceof MiniClaudeError
+  // Convert to LumiError if needed
+  const normalizedError: LumiError = error instanceof LumiError
     ? error
     : error instanceof Error
       ? (() => {
@@ -39,13 +39,13 @@ export function handleError(error: unknown, context: ErrorContext = {}): never {
           return new ConfigurationError(error.message, context)
         }
 
-        // Default to generic MiniClaudeError
-        return new MiniClaudeError(error.message, {
+        // Default to generic LumiError
+        return new LumiError(error.message, {
           context,
           userFriendly: false,
         })
       })()
-      : new MiniClaudeError(String(error), {
+      : new LumiError(String(error), {
           context,
           userFriendly: false,
         })
@@ -73,7 +73,7 @@ export function handleError(error: unknown, context: ErrorContext = {}): never {
  */
 export function handleSilentError(error: unknown, context: ErrorContext = {}): void {
   const logger = getLogger()
-  const normalizedError: MiniClaudeError = error instanceof MiniClaudeError
+  const normalizedError: LumiError = error instanceof LumiError
     ? error
     : error instanceof Error
       ? (() => {
@@ -95,13 +95,13 @@ export function handleSilentError(error: unknown, context: ErrorContext = {}): v
           return new ConfigurationError(error.message, context)
         }
 
-        // Default to generic MiniClaudeError
-        return new MiniClaudeError(error.message, {
+        // Default to generic LumiError
+        return new LumiError(error.message, {
           context,
           userFriendly: false,
         })
       })()
-      : new MiniClaudeError(String(error), {
+      : new LumiError(String(error), {
           context,
           userFriendly: false,
         })

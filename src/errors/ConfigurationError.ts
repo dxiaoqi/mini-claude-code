@@ -3,9 +3,9 @@
  *
  * Errors related to configuration issues.
  */
-import { MiniClaudeError, ErrorCategory, ErrorContext, SuggestedAction } from './MiniClaudeError.js'
+import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
 
-export class ConfigurationError extends MiniClaudeError {
+export class ConfigurationError extends LumiError {
   constructor(
     message: string,
     context: ErrorContext = {},

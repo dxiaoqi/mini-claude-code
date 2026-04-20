@@ -1,6 +1,6 @@
-# Mini Claude Code
+# Lumi
 
-一个思路对齐 Claude Code 的轻量级 AI 编程助手，内置 Web UI，支持多 Provider、工具调用、MCP 集成与上下文压缩。
+一个轻量级 AI 编程助手，内置 Web UI，支持多 Provider、工具调用、MCP 集成与上下文压缩，并可生成可交互的可视化图表（架构图、数据看板等）。
 
 ---
 
@@ -16,21 +16,21 @@
 ```bash
 # 1. 克隆并安装依赖
 git clone <repo>
-cd mini-claude-code
+cd /lumi
 npm install
 
 # 2. 安装 Web UI 依赖
 cd ui && npm install && cd ..
 
 # 3. 全局注册 CLI（可选）
-npm run link-global   # 之后可直接使用 mini-claude 命令
+npm run link-global   # 之后可直接使用 lumi 命令
 ```
 
 ---
 
 ## 配置 API
 
-在 `~/.mini-claude/settings.json` 中填写 API 信息（首次使用时创建此文件）：
+在 `~/.lumi/settings.json` 中填写 API 信息（首次使用时创建此文件）：
 
 ```json
 {
@@ -81,7 +81,7 @@ OPENAI_BASE_URL=https://api.example.com/v1
 
 ```bash
 # 全局安装后
-nvm use 22 && mini-claude --tui
+nvm use 22 && lumi --tui
 
 # 或通过 npm script
 npm run dev:web
@@ -93,23 +93,23 @@ npm run dev:web
 
 ```bash
 # 使用 settings.json 中的配置
-mini-claude
+lumi
 
 # 临时覆盖配置
-mini-claude --api-key sk-xxx --model claude-sonnet-4-20250514
+lumi --api-key sk-xxx --model claude-sonnet-4-20250514
 
 # 指定工作目录
-mini-claude --cwd /path/to/project
+lumi --cwd /path/to/project
 ```
 
 ### 方式三：管道模式（非交互批处理）
 
 ```bash
 # 从 stdin 读取，自动批准所有工具调用
-echo "帮我列出当前目录所有 TS 文件" | mini-claude -p
+echo "帮我列出当前目录所有 TS 文件" | lumi -p
 
 # 结合脚本使用
-cat task.txt | mini-claude -p --bypass-permissions
+cat task.txt | lumi -p --bypass-permissions
 ```
 
 ### 方式四：HTTP Server 模式
@@ -117,7 +117,7 @@ cat task.txt | mini-claude -p --bypass-permissions
 仅启动后端 API，不打开浏览器：
 
 ```bash
-mini-claude --serve --port 3001
+lumi --serve --port 3001
 ```
 
 ---
@@ -125,7 +125,7 @@ mini-claude --serve --port 3001
 ## CLI 参数
 
 ```
-mini-claude [options] [prompt]
+lumi [options] [prompt]
 ```
 
 
@@ -172,7 +172,7 @@ mini-claude [options] [prompt]
 
 输入框左侧有一个模式切换按钮：
 
-- **Agent 模式**（默认）：直连 mini-claude 后端，支持完整工具调用（bash / 文件读写 / 搜索 / MCP 等），适合代码辅助、项目分析、任务执行
+- **Agent 模式**（默认）：直连 lumi 后端，支持完整工具调用（bash / 文件读写 / 搜索 / MCP 等），适合代码辅助、项目分析、任务执行
 - **Artifacts 模式**：Agent 模式 + 可视化渲染，在 Agent 工具调用能力的基础上，额外支持将 `<visual type="svg">` / `<visual type="html">` 输出渲染为交互图表；适合生成架构图、数据可视化、交互组件
 
 ### 工具调用面板
@@ -188,7 +188,7 @@ mini-claude [options] [prompt]
 Artifacts 模式生成的 SVG/HTML 图表右上角有"保存"按钮，点击后自动保存到：
 
 ```
-<工作目录>/.mini-claude/artifacts/<timestamp>-<title>.[svg|html]
+<工作目录>/.lumi/artifacts/<timestamp>-<title>.[svg|html]
 ```
 
 ### 权限弹窗
@@ -254,7 +254,7 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ## MCP 配置
 
-在 `~/.mini-claude/settings.json` 或项目的 `.mini-claude/settings.json` 中配置 MCP 服务器：
+在 `~/.lumi/settings.json` 或项目的 `.lumi/settings.json` 中配置 MCP 服务器：
 
 ```json
 {
@@ -281,7 +281,7 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ## Skill 系统
 
-在 `.mini-claude/skills/` 下创建 Markdown 文件来定义可复用的工作流：
+在 `.lumi/skills/` 下创建 Markdown 文件来定义可复用的工作流：
 
 ```markdown
 ---
@@ -303,7 +303,7 @@ allowedTools: [Bash]
 将 AI 变为多 Agent 任务协调者，适合需要并行子任务的复杂工作流：
 
 ```bash
-mini-claude --coordinator
+lumi --coordinator
 ```
 
 典型工作流：`Research（并行）→ Synthesis → Implementation（并行）→ Verification`
@@ -313,7 +313,7 @@ mini-claude --coordinator
 ## 项目结构
 
 ```
-mini-claude-code/
+/lumi/
 ├── src/                    # 后端核心（Node.js）
 │   ├── cli.ts              # CLI 入口
 │   ├── types.ts            # 核心类型（含 UIEvent 统一事件协议）
@@ -331,7 +331,7 @@ mini-claude-code/
 │   ├── src/components/     # 组件（ToolCallCard、PermissionDialog 等）
 │   ├── src/lib/            # 工具库（visual renderer、orchestrator 等）
 │   └── skill-pack/         # Artifacts 模式的 visual 协议规范
-├── bin/mini-claude.js      # CLI 入口脚本
+├── bin/lumi.js      # CLI 入口脚本
 └── package.json
 ```
 
@@ -340,16 +340,16 @@ mini-claude-code/
 ## 常见问题
 
 **Q: 启动时报 `API key is required`**  
-A: 在 `~/.mini-claude/settings.json` 中配置 `api.anthropicApiKey` 或 `api.openaiApiKey`，或设置对应环境变量。
+A: 在 `~/.lumi/settings.json` 中配置 `api.anthropicApiKey` 或 `api.openaiApiKey`，或设置对应环境变量。
 
 **Q: Web UI 启动后浏览器打开空白页**  
 A: Next.js 冷启动需要约 5 秒编译，稍等片刻后刷新页面。
 
-**Q: `mini-claude` 命令找不到**  
+**Q: `lumi` 命令找不到**  
 A: 需要先运行 `npm run link-global`，且确保使用 Node.js 20+（`nvm use 22`）。
 
 **Q: Artifacts 模式生成的图表没有显示**  
 A: 确保已切换到 Artifacts 模式（输入框左侧按钮显示 `⬡ Artifacts`，紫色）。首次使用 Artifacts 模式时会在后台预加载 visual 协议，切换后稍等 1-2 秒再发消息效果最佳。
 
 **Q: 如何保存对话记录**  
-A: 每次对话的 transcript 自动保存在 `~/.mini-claude/projects/<hash>/` 目录下，使用 `mini-claude --resume` 可以恢复历史会话。
+A: 每次对话的 transcript 自动保存在 `~/.lumi/projects/<hash>/` 目录下，使用 `lumi --resume` 可以恢复历史会话。

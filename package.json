@@ -1,8 +1,8 @@
 {
-  "name": "mini-claude-code",
+  "name": "lumi",
   "version": "0.1.0",
   "type": "module",
-  "description": "A minimal but capable AI coding agent with web UI, inspired by Claude Code",
+  "description": "Lumi — AI coding agent with web UI, tool use, MCP and visual diagram generation",
   "keywords": [
     "ai",
     "agent",
@@ -12,12 +12,13 @@
     "anthropic",
     "openai",
     "mcp",
-    "tool-use"
+    "tool-use",
+    "lumi"
   ],
-  "homepage": "https://github.com/dxiaoqi/mini-claude-code",
+  "homepage": "https://github.com/dxiaoqi/lumi",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dxiaoqi/mini-claude-code.git"
+    "url": "https://github.com/dxiaoqi/lumi.git"
   },
   "license": "MIT",
   "main": "dist/index.js",
@@ -25,7 +26,7 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "mini-claude": "bin/mini-claude.js"
+    "lumi": "bin/lumi.js"
   },
   "files": [
     "dist",

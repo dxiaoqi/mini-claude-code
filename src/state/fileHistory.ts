@@ -21,7 +21,7 @@ const snapshots: Map<string, FileSnapshot[]> = new Map()
  */
 function getSnapshotDir(state: SessionState): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(homeDir, '.mini-claude', 'snapshots', state.sessionId)
+  return resolve(homeDir, '.lumi', 'snapshots', state.sessionId)
 }
 
 /**
