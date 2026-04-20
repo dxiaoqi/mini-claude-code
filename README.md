@@ -1,4 +1,4 @@
-# Lumi
+# Lino
 
 一个轻量级 AI 编程助手，内置 Web UI，支持多 Provider、工具调用、MCP 集成与上下文压缩，并可生成可交互的可视化图表（架构图、数据看板等）。
 
@@ -16,36 +16,36 @@
 ### 方式一：npm 全局安装（推荐）
 
 ```bash
-npm install -g lumi
+npm install -g lino
 ```
 
 安装完成后直接使用：
 
 ```bash
-lumi --tui     # 启动 Web UI
-lumi           # 终端交互模式
+lino --tui     # 启动 Web UI
+lino           # 终端交互模式
 ```
 
 ### 方式二：从源码安装（开发 / 贡献）
 
 ```bash
 # 1. 克隆并安装依赖
-git clone https://github.com/dxiaoqi/lumi
-cd lumi
+git clone https://github.com/dxiaoqi/lino
+cd lino
 npm install
 
 # 2. 安装 Web UI 依赖
 cd ui && npm install && cd ..
 
 # 3. 全局注册 CLI
-npm run link-global   # 之后可直接使用 lumi 命令
+npm run link-global   # 之后可直接使用 lino 命令
 ```
 
 ---
 
 ## 配置 API
 
-在 `~/.lumi/settings.json` 中填写 API 信息（首次使用时创建此文件）：
+在 `~/.lino/settings.json` 中填写 API 信息（首次使用时创建此文件）：
 
 ```json
 {
@@ -96,7 +96,7 @@ OPENAI_BASE_URL=https://api.example.com/v1
 
 ```bash
 # 全局安装后
-nvm use 22 && lumi --tui
+nvm use 22 && lino --tui
 
 # 或通过 npm script
 npm run dev:web
@@ -108,23 +108,23 @@ npm run dev:web
 
 ```bash
 # 使用 settings.json 中的配置
-lumi
+lino
 
 # 临时覆盖配置
-lumi --api-key sk-xxx --model claude-sonnet-4-20250514
+lino --api-key sk-xxx --model claude-sonnet-4-20250514
 
 # 指定工作目录
-lumi --cwd /path/to/project
+lino --cwd /path/to/project
 ```
 
 ### 方式三：管道模式（非交互批处理）
 
 ```bash
 # 从 stdin 读取，自动批准所有工具调用
-echo "帮我列出当前目录所有 TS 文件" | lumi -p
+echo "帮我列出当前目录所有 TS 文件" | lino -p
 
 # 结合脚本使用
-cat task.txt | lumi -p --bypass-permissions
+cat task.txt | lino -p --bypass-permissions
 ```
 
 ### 方式四：HTTP Server 模式
@@ -132,7 +132,7 @@ cat task.txt | lumi -p --bypass-permissions
 仅启动后端 API，不打开浏览器：
 
 ```bash
-lumi --serve --port 3001
+lino --serve --port 3001
 ```
 
 ---
@@ -140,7 +140,7 @@ lumi --serve --port 3001
 ## CLI 参数
 
 ```
-lumi [options] [prompt]
+lino [options] [prompt]
 ```
 
 
@@ -187,7 +187,7 @@ lumi [options] [prompt]
 
 输入框左侧有一个模式切换按钮：
 
-- **Agent 模式**（默认）：直连 lumi 后端，支持完整工具调用（bash / 文件读写 / 搜索 / MCP 等），适合代码辅助、项目分析、任务执行
+- **Agent 模式**（默认）：直连 lino 后端，支持完整工具调用（bash / 文件读写 / 搜索 / MCP 等），适合代码辅助、项目分析、任务执行
 - **Artifacts 模式**：Agent 模式 + 可视化渲染，在 Agent 工具调用能力的基础上，额外支持将 `<visual type="svg">` / `<visual type="html">` 输出渲染为交互图表；适合生成架构图、数据可视化、交互组件
 
 ### 工具调用面板
@@ -203,7 +203,7 @@ lumi [options] [prompt]
 Artifacts 模式生成的 SVG/HTML 图表右上角有"保存"按钮，点击后自动保存到：
 
 ```
-<工作目录>/.lumi/artifacts/<timestamp>-<title>.[svg|html]
+<工作目录>/.lino/artifacts/<timestamp>-<title>.[svg|html]
 ```
 
 ### 权限弹窗
@@ -269,7 +269,7 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ## MCP 配置
 
-在 `~/.lumi/settings.json` 或项目的 `.lumi/settings.json` 中配置 MCP 服务器：
+在 `~/.lino/settings.json` 或项目的 `.lino/settings.json` 中配置 MCP 服务器：
 
 ```json
 {
@@ -296,7 +296,7 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ## Skill 系统
 
-在 `.lumi/skills/` 下创建 Markdown 文件来定义可复用的工作流：
+在 `.lino/skills/` 下创建 Markdown 文件来定义可复用的工作流：
 
 ```markdown
 ---
@@ -318,7 +318,7 @@ allowedTools: [Bash]
 将 AI 变为多 Agent 任务协调者，适合需要并行子任务的复杂工作流：
 
 ```bash
-lumi --coordinator
+lino --coordinator
 ```
 
 典型工作流：`Research（并行）→ Synthesis → Implementation（并行）→ Verification`
@@ -328,7 +328,7 @@ lumi --coordinator
 ## 项目结构
 
 ```
-/lumi/
+/lino/
 ├── src/                    # 后端核心（Node.js）
 │   ├── cli.ts              # CLI 入口
 │   ├── types.ts            # 核心类型（含 UIEvent 统一事件协议）
@@ -346,7 +346,7 @@ lumi --coordinator
 │   ├── src/components/     # 组件（ToolCallCard、PermissionDialog 等）
 │   ├── src/lib/            # 工具库（visual renderer、orchestrator 等）
 │   └── skill-pack/         # Artifacts 模式的 visual 协议规范
-├── bin/lumi.js      # CLI 入口脚本
+├── bin/lino.js      # CLI 入口脚本
 └── package.json
 ```
 
@@ -355,16 +355,16 @@ lumi --coordinator
 ## 常见问题
 
 **Q: 启动时报 `API key is required`**  
-A: 在 `~/.lumi/settings.json` 中配置 `api.anthropicApiKey` 或 `api.openaiApiKey`，或设置对应环境变量。
+A: 在 `~/.lino/settings.json` 中配置 `api.anthropicApiKey` 或 `api.openaiApiKey`，或设置对应环境变量。
 
 **Q: Web UI 启动后浏览器打开空白页**  
 A: Next.js 冷启动需要约 5 秒编译，稍等片刻后刷新页面。
 
-**Q: `lumi` 命令找不到**  
+**Q: `lino` 命令找不到**  
 A: 需要先运行 `npm run link-global`，且确保使用 Node.js 20+（`nvm use 22`）。
 
 **Q: Artifacts 模式生成的图表没有显示**  
 A: 确保已切换到 Artifacts 模式（输入框左侧按钮显示 `⬡ Artifacts`，紫色）。首次使用 Artifacts 模式时会在后台预加载 visual 协议，切换后稍等 1-2 秒再发消息效果最佳。
 
 **Q: 如何保存对话记录**  
-A: 每次对话的 transcript 自动保存在 `~/.lumi/projects/<hash>/` 目录下，使用 `lumi --resume` 可以恢复历史会话。
+A: 每次对话的 transcript 自动保存在 `~/.lino/projects/<hash>/` 目录下，使用 `lino --resume` 可以恢复历史会话。

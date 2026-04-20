@@ -22,9 +22,9 @@ interface MCPServerConfigRaw {
 
 /**
  * Load and merge MCP configs from three levels:
- *   1. User-level:   ~/.lumi/settings.json
- *   2. Project-level: .lumi/settings.json
- *   3. Local-level:   .lumi/settings.local.json (not committed)
+ *   1. User-level:   ~/.lino/settings.json
+ *   2. Project-level: .lino/settings.json
+ *   3. Local-level:   .lino/settings.local.json (not committed)
  *
  * Later levels override earlier ones (local > project > user).
  */
@@ -34,9 +34,9 @@ export async function loadMCPConfigs(
   const homeDir = process.env.HOME || process.env.USERPROFILE || ''
 
   const configPaths = [
-    homeDir ? resolve(homeDir, '.lumi', 'settings.json') : null,
-    resolve(projectRoot, '.lumi', 'settings.json'),
-    resolve(projectRoot, '.lumi', 'settings.local.json'),
+    homeDir ? resolve(homeDir, '.lino', 'settings.json') : null,
+    resolve(projectRoot, '.lino', 'settings.json'),
+    resolve(projectRoot, '.lino', 'settings.local.json'),
   ].filter(Boolean) as string[]
 
   const merged: Record<string, MCPServerConfigRaw> = {}

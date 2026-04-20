@@ -10,7 +10,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { PermissionResult, Tool, ToolResult } from '../types.js'
 
 /**
- * Wrap MCP tools as /lumi Tool interface.
+ * Wrap MCP tools as /lino Tool interface.
  * Tool names are namespaced: mcp__<serverName>__<toolName>
  */
 export function adaptMCPTools(

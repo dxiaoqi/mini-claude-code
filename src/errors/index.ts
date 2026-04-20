@@ -27,7 +27,7 @@
  * ```
  */
 
-export * from './LumiError.js'
+export * from './LinoError.js'
 export * from './NetworkError.js'
 export * from './ValidationError.js'
 export * from './ToolExecutionError.js'

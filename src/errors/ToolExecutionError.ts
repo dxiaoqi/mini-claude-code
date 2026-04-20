@@ -3,9 +3,9 @@
  *
  * Errors related to tool execution failures.
  */
-import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
+import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
 
-export class ToolExecutionError extends LumiError {
+export class ToolExecutionError extends LinoError {
   constructor(
     message: string,
     context: ErrorContext = {},

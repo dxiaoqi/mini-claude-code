@@ -49,7 +49,7 @@ export const ListMcpResourcesTool: Tool<Input, Output> = {
     if (!mcpManager) {
       return {
         data: { resources: [], count: 0 },
-        metadata: { error: 'No MCP servers connected. Configure mcpServers in .lumi/settings.json.' },
+        metadata: { error: 'No MCP servers connected. Configure mcpServers in .lino/settings.json.' },
       }
     }
 

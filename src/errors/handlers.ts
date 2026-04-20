@@ -4,7 +4,7 @@
  * Centralized error handling functions for the application.
  */
 import { getLogger } from '../logging/index.js'
-import { LumiError } from './LumiError.js'
+import { LinoError } from './LinoError.js'
 import type { ErrorContext } from './types.js'
 import { ValidationError } from './ValidationError.js'
 import { ConfigurationError } from './ConfigurationError.js'
@@ -16,8 +16,8 @@ import { NetworkError } from './NetworkError.js'
 export function handleError(error: unknown, context: ErrorContext = {}): never {
   const logger = getLogger()
 
-  // Convert to LumiError if needed
-  const normalizedError: LumiError = error instanceof LumiError
+  // Convert to LinoError if needed
+  const normalizedError: LinoError = error instanceof LinoError
     ? error
     : error instanceof Error
       ? (() => {
@@ -39,13 +39,13 @@ export function handleError(error: unknown, context: ErrorContext = {}): never {
           return new ConfigurationError(error.message, context)
         }
 
-        // Default to generic LumiError
-        return new LumiError(error.message, {
+        // Default to generic LinoError
+        return new LinoError(error.message, {
           context,
           userFriendly: false,
         })
       })()
-      : new LumiError(String(error), {
+      : new LinoError(String(error), {
           context,
           userFriendly: false,
         })
@@ -73,7 +73,7 @@ export function handleError(error: unknown, context: ErrorContext = {}): never {
  */
 export function handleSilentError(error: unknown, context: ErrorContext = {}): void {
   const logger = getLogger()
-  const normalizedError: LumiError = error instanceof LumiError
+  const normalizedError: LinoError = error instanceof LinoError
     ? error
     : error instanceof Error
       ? (() => {
@@ -95,13 +95,13 @@ export function handleSilentError(error: unknown, context: ErrorContext = {}): v
           return new ConfigurationError(error.message, context)
         }
 
-        // Default to generic LumiError
-        return new LumiError(error.message, {
+        // Default to generic LinoError
+        return new LinoError(error.message, {
           context,
           userFriendly: false,
         })
       })()
-      : new LumiError(String(error), {
+      : new LinoError(String(error), {
           context,
           userFriendly: false,
         })

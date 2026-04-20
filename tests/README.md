@@ -1,6 +1,6 @@
-# Lumi - Agent Ability Tests
+# Lino - Agent Ability Tests
 
-Test suite to evaluate and validate the capabilities of the /lumi agent.
+Test suite to evaluate and validate the capabilities of the /lino agent.
 
 ## Agent Loop 能力评估 (Agent Loop Capability Evaluation)
 

@@ -3,10 +3,10 @@
  *
  * Errors related to network operations and API calls.
  */
-import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
+import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
 import type { ErrorMetadata } from './types.js'
 
-export class NetworkError extends LumiError {
+export class NetworkError extends LinoError {
   constructor(
     message: string,
     context: ErrorContext = {},
@@ -17,7 +17,7 @@ export class NetworkError extends LumiError {
     if (statusCode === 401) {
       suggestedActions.push({
         title: 'Check API Key',
-        description: 'Verify your API key is correct in ~/.lumi/settings.json',
+        description: 'Verify your API key is correct in ~/.lino/settings.json',
       })
     } else if (statusCode === 429) {
       suggestedActions.push({

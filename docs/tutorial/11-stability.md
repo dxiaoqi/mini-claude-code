@@ -98,7 +98,7 @@ if (stopReason === 'length' || stopReason === 'max_tokens') {
 // 超过 100K 字符的工具结果 → 持久化到磁盘
 
 if (content.length > 100_000) {
-  const filePath = `~/.lumi/overflow/${sessionId}/${toolUseId}.txt`
+  const filePath = `~/.lino/overflow/${sessionId}/${toolUseId}.txt`
   await writeFile(filePath, content)
 
   const preview = content.slice(0, 500)
@@ -123,7 +123,7 @@ if (!tool.isReadOnly?.(input)) {
 snapshots.set(filePath, [...existing, { filePath, content, timestamp, toolName }])
 
 // 磁盘归档（冷备）
-await writeFile(`~/.lumi/snapshots/${sessionId}/${safeFileName}.snapshot`, content)
+await writeFile(`~/.lino/snapshots/${sessionId}/${safeFileName}.snapshot`, content)
 ```
 
 `/undo` 命令恢复最近的快照：
@@ -138,7 +138,7 @@ await writeFile(`~/.lumi/snapshots/${sessionId}/${safeFileName}.snapshot`, conte
 每条消息都写入 JSONL 文件：
 
 ```
-~/.lumi/projects/<hash>/<sessionId>.jsonl
+~/.lino/projects/<hash>/<sessionId>.jsonl
 ```
 
 格式：

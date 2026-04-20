@@ -65,7 +65,7 @@ const VERSION = '0.1.0'
 // 需要详细日志时可通过 LOG_LEVEL=info/debug 环境变量覆盖。
 const defaultLogLevel = process.stdout.isTTY ? 'warn' : 'info'
 const logger = createLogger({
-  name: 'lumi-cli',
+  name: 'lino-cli',
   level: (process.env.LOG_LEVEL as any) || defaultLogLevel,
   pretty: process.stdout.isTTY,
   development: process.env.NODE_ENV !== 'production',
@@ -74,10 +74,10 @@ const logger = createLogger({
 const program = new Command()
 
 program
-  .name('lumi')
-  .description('Lumi — AI coding assistant')
+  .name('lino')
+  .description('Lino — AI coding assistant')
   .version(VERSION)
-  .option('--api-key <key>', 'API key (reads from ~/.lumi/settings.json if not set)')
+  .option('--api-key <key>', 'API key (reads from ~/.lino/settings.json if not set)')
   .option('--base-url <url>', 'API base URL')
   .option('--model <model>', 'Model name')
   .option('--provider <type>', 'API provider: anthropic or openai (auto-detected)')
@@ -91,7 +91,7 @@ program
   .option('--host <host>', 'HTTP server host (default: localhost)')
   .option('--cors-origin <origin>', 'CORS allowed origin for web UI')
   .option('--config', 'Show current effective configuration')
-  .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.lumi/projects/<hash>/<sessionId>.trace.jsonl')
+  .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.lino/projects/<hash>/<sessionId>.trace.jsonl')
   .argument('[prompt]', 'Initial prompt (or pipe via stdin with -p)')
 
 program.action(async (prompt: string | undefined, options: Record<string, unknown>) => {
@@ -116,7 +116,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   if (!apiKey) {
     console.error(chalk.red('Error: API key is required.'))
     console.error(chalk.dim('Set it via:'))
-    console.error(chalk.dim('  1. ~/.lumi/settings.json  →  { "api": { "anthropicApiKey": "..." } }'))
+    console.error(chalk.dim('  1. ~/.lino/settings.json  →  { "api": { "anthropicApiKey": "..." } }'))
     console.error(chalk.dim('  2. Environment variable ANTHROPIC_API_KEY or OPENAI_API_KEY'))
     console.error(chalk.dim('  3. CLI flag --api-key'))
     process.exit(1)
@@ -141,7 +141,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   } else {
     if (!baseURL) {
       console.error(chalk.red('Error: API base URL is required for OpenAI compatible provider.'))
-      console.error(chalk.dim('Set it via openaiBaseUrl in ~/.lumi/settings.json or OPENAI_BASE_URL env.'))
+      console.error(chalk.dim('Set it via openaiBaseUrl in ~/.lino/settings.json or OPENAI_BASE_URL env.'))
       process.exit(1)
     }
     baseClient = createOpenAICompatibleClient({
@@ -329,7 +329,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
   // ── HTTP Server 模式 ──
   if (isServe) {
-    const { createLumiServer } = await import('./server/index.js')
+    const { createLinoServer } = await import('./server/index.js')
     const allBaseToolsForServer: Tool[] = [
       BashTool, FileReadTool, FileEditTool, FileWriteTool,
       GlobTool, GrepTool,
@@ -358,7 +358,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     if (existingLock) {
       const url = `http://${existingLock.host}:${existingLock.port}`
       console.log(chalk.yellow(
-        `⚡ lumi server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
+        `⚡ lino server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
       ))
       if (isTui) {
         console.log(chalk.cyan(`🌐 Opening browser: ${url}`))
@@ -397,7 +397,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       resolvePath(__dir, '..', 'ui', 'out'),
     ].find(p => { try { statSync(p); return true } catch { return false } })
 
-    const server = createLumiServer({
+    const server = createLinoServer({
       port, host, corsOrigin,
       apiClient,
       tools: allToolsForServer,
@@ -448,7 +448,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
             PORT: String(uiPort),
             HOSTNAME: host,
             // Pass the actual backend URL so the standalone server can relay it
-            LUMI_API_URL: `http://${host}:${port}`,
+            LINO_API_URL: `http://${host}:${port}`,
           },
         })
       } else {
@@ -530,7 +530,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   }
 
   console.log(chalk.bold.cyan('╔══════════════════════════════════════╗'))
-  console.log(chalk.bold.cyan('║      Lumi v' + VERSION + '        ║'))
+  console.log(chalk.bold.cyan('║      Lino v' + VERSION + '        ║'))
   console.log(chalk.bold.cyan('╚══════════════════════════════════════╝'))
   console.log(chalk.dim(`Provider: ${providerType} | Model: ${model}${useCoordinator ? ' | Mode: Coordinator' : ''}`))
   console.log(chalk.dim(`CWD: ${process.cwd()}`))
@@ -852,16 +852,16 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         console.log(chalk.green(`Model set to: ${value}`))
       } else if (key === 'api.anthropicApiKey') {
         await saveApiConfig('user', cwd, { anthropicApiKey: value })
-        console.log(chalk.green('Saved anthropicApiKey to ~/.lumi/settings.json'))
+        console.log(chalk.green('Saved anthropicApiKey to ~/.lino/settings.json'))
       } else if (key === 'api.anthropicBaseUrl') {
         await saveApiConfig('user', cwd, { anthropicBaseUrl: value })
-        console.log(chalk.green('Saved anthropicBaseUrl to ~/.lumi/settings.json'))
+        console.log(chalk.green('Saved anthropicBaseUrl to ~/.lino/settings.json'))
       } else if (key === 'api.openaiApiKey') {
         await saveApiConfig('user', cwd, { openaiApiKey: value })
-        console.log(chalk.green('Saved openaiApiKey to ~/.lumi/settings.json'))
+        console.log(chalk.green('Saved openaiApiKey to ~/.lino/settings.json'))
       } else if (key === 'api.model') {
         await saveApiConfig('user', cwd, { model: value })
-        console.log(chalk.green(`Saved default model to ~/.lumi/settings.json`))
+        console.log(chalk.green(`Saved default model to ~/.lino/settings.json`))
       } else {
         console.log(chalk.yellow(`Unknown config key: ${key}`))
         console.log(chalk.dim('Available: model, api.anthropicApiKey, api.anthropicBaseUrl, api.openaiApiKey, api.model'))

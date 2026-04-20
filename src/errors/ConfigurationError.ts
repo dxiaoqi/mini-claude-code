@@ -3,9 +3,9 @@
  *
  * Errors related to configuration issues.
  */
-import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
+import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
 
-export class ConfigurationError extends LumiError {
+export class ConfigurationError extends LinoError {
   constructor(
     message: string,
     context: ErrorContext = {},

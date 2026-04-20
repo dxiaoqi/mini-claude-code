@@ -4,8 +4,8 @@
  * Retry mechanisms with exponential backoff for transient failures.
  */
 import { getLogger } from '../logging/index.js'
-import { LumiError } from './LumiError.js'
-import { ErrorCategory } from './LumiError.js'
+import { LinoError } from './LinoError.js'
+import { ErrorCategory } from './LinoError.js'
 
 export interface RetryOptions {
   maxRetries?: number
@@ -77,7 +77,7 @@ export async function withRetry<T>(
  */
 function isRetryableError(error: Error): boolean {
   // Network errors are retryable
-  if (error instanceof LumiError) {
+  if (error instanceof LinoError) {
     return error.retryable && error.category !== ErrorCategory.VALIDATION
   }
 

@@ -8,7 +8,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_MODEL_NAME: process.env.ARTIFACTS_LLM_MODEL || 'claude',
     NEXT_PUBLIC_DEBUG: process.env.ARTIFACTS_DEBUG || '',
-    NEXT_PUBLIC_LUMI_URL: process.env.NEXT_PUBLIC_LUMI_URL || 'http://localhost:3001',
+    NEXT_PUBLIC_LINO_URL: process.env.NEXT_PUBLIC_LINO_URL || 'http://localhost:3001',
   },
 
   experimental: {

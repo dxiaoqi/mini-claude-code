@@ -1,14 +1,14 @@
 /**
- * LumiError - Base Error Class
+ * LinoError - Base Error Class
  *
- * Base class for all custom errors in /lumi.
+ * Base class for all custom errors in /lino.
  */
 import { ErrorCategory } from './types.js'
 import type { ErrorContext, SuggestedAction, ErrorMetadata } from './types.js'
 export { ErrorCategory } from './types.js'
 export type { ErrorContext, SuggestedAction, ErrorMetadata } from './types.js'
 
-export class LumiError extends Error {
+export class LinoError extends Error {
   public readonly category: ErrorCategory
   public readonly context: ErrorContext
   public readonly suggestedActions: SuggestedAction[]

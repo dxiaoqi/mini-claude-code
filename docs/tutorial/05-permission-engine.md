@@ -61,7 +61,7 @@ rule.pathPrefix === '/Users/me/project/'  // 只允许此目录下的文件操�
 用户选择 "Always Allow"
   → state.permissionRules.push({ tool: 'Bash', decision: 'allow', source: 'session' })
   → CLI 退出时 → persistPermissionRules('local', projectRoot, rules)
-  → 写入 .lumi/settings.local.json
+  → 写入 .lino/settings.local.json
   → 下次启动 → loadSettings() → 自动加载
 ```
 

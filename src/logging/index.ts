@@ -1,7 +1,7 @@
 /**
  * Logging Module
  *
- * Centralized logging system for /lumi.
+ * Centralized logging system for /lino.
  *
  * Exports:
  * - Logger class for direct instantiation

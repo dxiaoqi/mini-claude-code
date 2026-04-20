@@ -7,7 +7,7 @@ import { buildSvgDoc, buildHtmlDoc, buildThreejsDoc, extractHostCssVars } from '
 
 const MIN_H: Record<VisualType, number> = { svg: 180, html: 160, threejs: 360 }
 const MAX_H = 2400
-const LUMI_URL = process.env.NEXT_PUBLIC_LUMI_URL || 'http://localhost:3001'
+const LINO_URL = process.env.NEXT_PUBLIC_LINO_URL || 'http://localhost:3001'
 
 interface Props {
   content: string
@@ -155,7 +155,7 @@ export function VisualRenderer({ content, declaredType, isComplete, onSendPrompt
     if (saveState !== 'idle') return
     setSaveState('saving')
     try {
-      await fetch(`${LUMI_URL}/api/artifacts/save`, {
+      await fetch(`${LINO_URL}/api/artifacts/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visualType, content, title }),
@@ -186,11 +186,11 @@ export function VisualRenderer({ content, declaredType, isComplete, onSendPrompt
         }}
         title={`visual-${visualType}`}
       />
-      {/* Save to .lumi/artifacts/ button */}
+      {/* Save to .lino/artifacts/ button */}
       {isComplete && (
         <button
           onClick={handleSave}
-          title={saveState === 'saved' ? '已保存到 .lumi/artifacts/' : '保存到本地 .lumi/artifacts/'}
+          title={saveState === 'saved' ? '已保存到 .lino/artifacts/' : '保存到本地 .lino/artifacts/'}
           style={{
             position: 'absolute',
             top: 8,

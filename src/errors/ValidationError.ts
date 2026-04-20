@@ -3,9 +3,9 @@
  *
  * Errors related to input validation and schema violations.
  */
-import { LumiError, ErrorCategory, ErrorContext, SuggestedAction } from './LumiError.js'
+import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
 
-export class ValidationError extends LumiError {
+export class ValidationError extends LinoError {
   constructor(
     message: string,
     context: ErrorContext = {},
