@@ -24,7 +24,8 @@ import { createSessionState } from '../state/SessionState.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
-import { loadSettings, getLocalConfigPath } from '../utils/config.js'
+import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
+import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type {
@@ -48,6 +49,17 @@ interface SessionEntry {
   lastActiveAt: Date
 }
 
+/** Loopback clients only (Node SSR / curl). Browsers send Origin on cross-port fetches. */
+function isLoopbackRemote(req: IncomingMessage): boolean {
+  const a = req.socket.remoteAddress
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1'
+}
+
+function browserSentOrigin(req: IncomingMessage): boolean {
+  const o = req.headers.origin
+  return typeof o === 'string' && o.length > 0
+}
+
 export interface ServerConfig {
   port: number
   host: string
@@ -65,6 +77,8 @@ export interface ServerConfig {
 
 export function createBlinoServer(config: ServerConfig) {
   const sessions = new Map<string, SessionEntry>()
+  /** Replaced after PUT /api/config so new API keys apply without restart */
+  let liveApiClient: APIClient = config.apiClient
 
   // ── 工具函数 ──
 
@@ -119,7 +133,7 @@ export function createBlinoServer(config: ServerConfig) {
       state,
       adapter,
       tools: config.tools,
-      apiClient: config.apiClient,
+      apiClient: liveApiClient,
       contextProviders: config.contextProviders,
       mcpManager: config.mcpManager,
       createdAt: new Date(),
@@ -163,20 +177,50 @@ export function createBlinoServer(config: ServerConfig) {
     if (method === 'GET' && path === '/api/config') {
       try {
         const settings = await loadSettings(config.cwd)
-        // 返回 workspace 可编辑的字段（不返回 API key 明文，只返回是否已设置）
-        json(res, {
-          model: settings.api?.model || config.defaultModel,
-          fallbackModel: settings.fallbackModel,
+        const topModel = settings.api?.model || settings.model || config.defaultModel
+        const includeSecrets =
+          url.searchParams.get('secrets') === '1' &&
+          isLoopbackRemote(req) &&
+          !browserSentOrigin(req)
+
+        const basePayload = {
+          model: topModel,
+          fallbackModel: settings.fallbackModel ?? settings.api?.fallbackModel,
           permissionMode: settings.permissionMode || 'default',
           devTrace: settings.devTrace || false,
           api: {
             provider: settings.api?.provider,
+            model: settings.api?.model || topModel,
             anthropicBaseUrl: settings.api?.anthropicBaseUrl,
             openaiBaseUrl: settings.api?.openaiBaseUrl,
             hasAnthropicKey: !!(settings.api?.anthropicApiKey),
             hasOpenaiKey: !!(settings.api?.openaiApiKey),
           },
-        })
+        }
+
+        // Node/SSR only: effective keys for Artifacts orchestrator (OpenAI SDK on Next server).
+        if (includeSecrets) {
+          const r = await resolveApiConfig(config.cwd)
+          json(res, {
+            ...basePayload,
+            model: r.model,
+            api: {
+              ...basePayload.api,
+              provider: r.provider,
+              model: r.model,
+              anthropicBaseUrl:
+                r.provider === 'anthropic' ? r.baseUrl : basePayload.api.anthropicBaseUrl,
+              openaiBaseUrl: r.provider === 'openai' ? r.baseUrl : basePayload.api.openaiBaseUrl,
+              anthropicApiKey: r.provider === 'anthropic' ? r.apiKey : '',
+              openaiApiKey: r.provider === 'openai' ? r.apiKey : '',
+              hasAnthropicKey: r.provider === 'anthropic' ? !!r.apiKey : basePayload.api.hasAnthropicKey,
+              hasOpenaiKey: r.provider === 'openai' ? !!r.apiKey : basePayload.api.hasOpenaiKey,
+            },
+          })
+          return
+        }
+
+        json(res, basePayload)
       } catch {
         json(res, {})
       }
@@ -228,6 +272,16 @@ export function createBlinoServer(config: ServerConfig) {
           for (const entry of sessions.values()) {
             entry.state.model = newModel
           }
+        }
+
+        try {
+          const nextClient = await rebuildApiClientFromWorkspace(config.cwd)
+          liveApiClient = nextClient
+          for (const entry of sessions.values()) {
+            entry.apiClient = nextClient
+          }
+        } catch (err) {
+          console.warn('[PUT /api/config] rebuild API client failed:', (err as Error).message)
         }
 
         json(res, { ok: true })

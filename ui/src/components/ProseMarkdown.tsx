@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 interface Props {
   content: string
@@ -15,7 +16,7 @@ export function ProseMarkdown({ content, isStreaming, compact }: Props) {
       className="prose-artifact"
       style={compact ? { fontSize: '13px', lineHeight: 1.65 } : undefined}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
         {content + (isStreaming ? '▋' : '')}
       </ReactMarkdown>
     </div>

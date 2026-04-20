@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ShieldAlert, ShieldCheck, X } from 'lucide-react'
 
 export interface PermissionRequest {
@@ -22,30 +22,48 @@ export function PermissionDialog({ request, onRespond }: Props) {
   const [hovered, setHovered] = useState<Decision | null>(null)
   const isHigh = request.riskLevel === 'high'
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onRespond('deny')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onRespond, request.requestId])
+
   const inputStr = (() => {
     try { return JSON.stringify(request.input, null, 2) } catch { return String(request.input) }
   })()
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: 20,
-    }}>
-      <div style={{
-        background: 'var(--bg-primary)',
-        border: '0.5px solid var(--border-default)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '24px',
-        maxWidth: 480,
-        width: '100%',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-      }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: 20,
+      }}
+      onClick={() => onRespond('deny')}
+      role="presentation"
+    >
+      <div
+        style={{
+          background: 'var(--bg-primary)',
+          border: '0.5px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '24px',
+          maxWidth: 480,
+          width: '100%',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        }}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="perm-dialog-title"
+      >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
           <div style={{
@@ -58,7 +76,7 @@ export function PermissionDialog({ request, onRespond }: Props) {
             <ShieldAlert width={18} height={18} style={{ color: isHigh ? '#ef4444' : '#eab308' }} />
           </div>
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+            <p id="perm-dialog-title" style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
               权限请求
             </p>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -163,6 +181,7 @@ function PermBtn({ label, variant, hovered, onHover, onClick, icon }: {
 
   return (
     <button
+      type="button"
       onClick={onClick}
       onMouseEnter={() => onHover(variant)}
       onMouseLeave={() => onHover(null)}

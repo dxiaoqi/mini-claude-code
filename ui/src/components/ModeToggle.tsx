@@ -40,6 +40,7 @@ export function ModeToggle({ mode, onChange, disabled }: Props) {
 
   return (
     <button
+      type="button"
       onClick={toggle}
       disabled={disabled}
       onMouseEnter={() => setHov(true)}

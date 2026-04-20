@@ -19,11 +19,16 @@ const BLOCK_RE_THINK = new RegExp(`${escapeRe(T_OPEN)}([\\s\\S]*?)${escapeRe(T_C
 
 const OPEN_TAGS = [RT_OPEN, T_OPEN] as const
 
-/** Strip SVG helper tags; aligns with page.tsx `stripTextTags`. */
+/**
+ * Remove mistaken LLM prose wrappers `<text>…</text>` (no attributes).
+ * Preserves real SVG `<text x="…" …>` which always has `=` in the opening tag.
+ */
 export function stripSvgTextWrapperTags(s: string): string {
   return s
-    .replace(/<text[^>]*>/gi, '')
-    .replace(/<\/text>/gi, '')
+    .replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (full, attrs: string, inner: string) => {
+      if (/=/.test(String(attrs))) return full
+      return String(inner)
+    })
     .trim()
 }
 

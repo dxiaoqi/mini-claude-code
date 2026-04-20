@@ -434,12 +434,16 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
       const standaloneServer = joinPath(pkgRoot, 'ui-standalone', 'server.js')
       const uiDir = joinPath(pkgRoot, 'ui')
+      /** Full clone / npm link: prefer live Next dev so UI matches ui/src (old ui-standalone won’t hide new features). */
+      const hasUiSource = es2(joinPath(uiDir, 'src', 'app', 'page.tsx'))
+      const forceStandalone = process.env.BLINO_UI_STANDALONE === '1'
+      const useStandaloneUi = es2(standaloneServer) && (forceStandalone || !hasUiSource)
 
       let uiProc: ReturnType<typeof spawn>
 
-      if (es2(standaloneServer)) {
-        // ── Production: pre-built standalone server ────────────────────────
-        console.log(chalk.cyan(`\n🖥  Starting UI server (port ${uiPort})…`))
+      if (useStandaloneUi) {
+        // ── Production: pre-built standalone server (npm install, no ui/src) ─
+        console.log(chalk.cyan(`\n🖥  Starting UI server (standalone, port ${uiPort})…`))
         uiProc = spawn(process.execPath, [standaloneServer], {
           cwd: pkgRoot,
           stdio: 'inherit',
@@ -454,6 +458,9 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       } else {
         // ── Development: Next.js dev server ───────────────────────────────
         console.log(chalk.cyan(`\n🖥  Starting UI dev server (port ${uiPort})…`))
+        if (hasUiSource) {
+          console.log(chalk.dim('   (using ui/src — run npm run build:web before publish; BLINO_UI_STANDALONE=1 to force bundled UI)'))
+        }
         uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
           cwd: uiDir,
           stdio: 'inherit',
@@ -469,7 +476,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
       // Wait for UI to be ready, then open browser
       const uiUrl = `http://${host}:${uiPort}`
-      const warmUpMs = es2(standaloneServer) ? 2000 : 4000
+      const warmUpMs = useStandaloneUi ? 2000 : 4000
       setTimeout(async () => {
         console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
         await openBrowser(uiUrl)

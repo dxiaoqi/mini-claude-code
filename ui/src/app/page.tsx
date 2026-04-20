@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon } from 'lucide-react'
+import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings } from 'lucide-react'
 import { MessageItem, type ChatMessage, type InProgressArtifact, type ToolCallItem } from '@/components/MessageItem'
 import { type WidgetState } from '@/components/WidgetRenderer'
 import { type PlanPhase } from '@/components/PlanProgress'
@@ -13,7 +13,10 @@ import {
 } from '@/lib/export-image'
 import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
-import { splitRedactedThinking, stripThinkingFromContentBlocks } from '@/lib/redacted-thinking'
+import { SessionMenu } from '@/components/SessionMenu'
+import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
+import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
+import { apiMessagesToChatMessages } from '@/lib/api-messages'
 
 const BLINO_URL = process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
 
@@ -29,12 +32,9 @@ let splitBlockCounter = 0
  *  2. Markdown fenced code blocks (```html / ```svg / ```threejs) — model compliance fallback
  * Both are promoted to proper visual blocks so the user sees a rendered component.
  */
-/** Strip <text>…</text> wrapper tags the model sometimes emits (anywhere in content). */
+/** Strip mistaken `<text>…</text>` prose wrappers; keep SVG `<text x=…>` (see redacted-thinking). */
 function stripTextTags(s: string): string {
-  return s
-    .replace(/<text[^>]*>/gi, '')   // remove any <text> opening tag (with or without attrs)
-    .replace(/<\/text>/gi, '')       // remove all </text> closing tags
-    .trim()
+  return stripSvgTextWrapperTags(s)
 }
 
 function extractEmbeddedVisuals(blocks: ContentBlock[]): ContentBlock[] {
@@ -44,14 +44,14 @@ function extractEmbeddedVisuals(blocks: ContentBlock[]): ContentBlock[] {
   for (const block of blocks) {
     if (block.kind !== 'text') { result.push(block); continue }
 
-    // Strip <text>...</text> wrapper tags the model sometimes outputs literally
-    const content = stripTextTags(block.content)
+    // Do not strip whole block first — that removes SVG <text> inside <visual>. Strip only plain-text paths.
+    const content = block.content
     const hasVisual = content.includes('<visual')
     const hasFence = content.includes('```')
 
     // Fast path: nothing to extract
     if (!hasVisual && !hasFence) {
-      if (content.trim()) result.push({ ...block, content })
+      if (content.trim()) result.push({ ...block, content: stripTextTags(content) })
       continue
     }
 
@@ -113,7 +113,7 @@ function extractEmbeddedVisuals(blocks: ContentBlock[]): ContentBlock[] {
       }
     }
 
-    if (content.trim()) result.push({ ...block, content })
+    if (content.trim()) result.push({ ...block, content: stripTextTags(content) })
   }
   return result
 }
@@ -127,9 +127,14 @@ export default function HomePage() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
-  const [mode, setMode] = useState<AppMode>('agent')
-  const modeRef = useRef<AppMode>('agent')
+  const [mode, setMode] = useState<AppMode>('artifacts')
+  const modeRef = useRef<AppMode>('artifacts')
   useEffect(() => { modeRef.current = mode }, [mode])
+
+  // Highlight the correct server session when switching Agent / Artifacts
+  useEffect(() => {
+    setActiveSessionId(mode === 'agent' ? agentSessionIdRef.current : artifactsSessionIdRef.current)
+  }, [mode])
 
   // Separate session refs per mode so each has its own system prompt context
   const agentSessionIdRef = useRef<string | null>(null)
@@ -157,7 +162,9 @@ export default function HomePage() {
         })
         if (sessRes.ok) {
           const d = await sessRes.json()
-          artifactsSessionIdRef.current = d.session?.id ?? null
+          const sid = d.session?.id ?? null
+          artifactsSessionIdRef.current = sid
+          if (sid) setActiveSessionId(sid)
         }
       } catch { /* skip */ }
     })()
@@ -192,6 +199,9 @@ export default function HomePage() {
   // Export states
   const [jsonExportState, setJsonExportState] = useState<ExportBtnState>('idle')
   const [imgExportState, setImgExportState] = useState<ExportBtnState>('idle')
+  /** Server session id for current mode — drives SessionMenu highlight */
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Refs
   const messagesRootRef = useRef<HTMLDivElement>(null)
@@ -303,6 +313,100 @@ export default function HomePage() {
   const updateMessage = useCallback((id: string, updates: Partial<ChatMessage>) => {
     setMessages(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m))
   }, [])
+
+  const fetchVisualContextBody = useCallback(async (): Promise<string | undefined> => {
+    try {
+      const ctxRes = await fetch(`${BLINO_URL}/api/visual-context`)
+      if (!ctxRes.ok) return undefined
+      const data = await ctxRes.json()
+      return data.content ?? undefined
+    } catch {
+      return undefined
+    }
+  }, [])
+
+  const startNewSession = useCallback(async () => {
+    if (isLoading) return
+    abortRef.current?.abort()
+    resetInProgress()
+    setMessages([])
+    setIsLoading(false)
+    currentAssistantMsgIdRef.current = null
+
+    if (mode === 'agent') {
+      agentSessionIdRef.current = null
+      try {
+        const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (sessRes.ok) {
+          const sessData = await sessRes.json()
+          const id = sessData.session?.id ?? null
+          agentSessionIdRef.current = id
+          if (id) setActiveSessionId(id)
+        }
+      } catch { /* ignore */ }
+      return
+    }
+
+    artifactsSessionIdRef.current = null
+    artifactsSessionPromiseRef.current = null
+    const addendum = await fetchVisualContextBody()
+    try {
+      const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addendum ? { systemPromptAddendum: addendum } : {}),
+      })
+      if (sessRes.ok) {
+        const sessData = await sessRes.json()
+        const id = sessData.session?.id ?? null
+        artifactsSessionIdRef.current = id
+        if (id) setActiveSessionId(id)
+      }
+    } catch { /* ignore */ }
+  }, [isLoading, resetInProgress, mode, fetchVisualContextBody])
+
+  const switchToSession = useCallback(async (sessionId: string) => {
+    if (isLoading) return
+    abortRef.current?.abort()
+    resetInProgress()
+    setIsLoading(false)
+    currentAssistantMsgIdRef.current = null
+
+    const body: Record<string, unknown> = { resumeSessionId: sessionId }
+    if (mode === 'artifacts') {
+      const addendum = await fetchVisualContextBody()
+      if (addendum) body.systemPromptAddendum = addendum
+    }
+
+    try {
+      const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!sessRes.ok) return
+      const sessData = await sessRes.json()
+      const id = sessData.session?.id ?? sessionId
+
+      if (mode === 'agent') agentSessionIdRef.current = id
+      else artifactsSessionIdRef.current = id
+
+      setActiveSessionId(id)
+
+      const stateRes = await fetch(`${BLINO_URL}/api/sessions/${id}`)
+      if (!stateRes.ok) {
+        setMessages([])
+        return
+      }
+      const stateData = await stateRes.json() as { messages?: Array<{ role: string; content: unknown }> }
+      const chat = apiMessagesToChatMessages(stateData.messages ?? [], id)
+      setMessages(chat)
+    } catch { /* ignore */ }
+  }, [isLoading, resetInProgress, mode, fetchVisualContextBody])
 
   // ─── Stream event processor (unified UIEvent format) ─────────────────────
 
@@ -513,7 +617,8 @@ export default function HomePage() {
 
           let remainingText = ''
           if (s.inVisual) {
-            remainingText = stripTextTags(s.visualAccum)
+            // Never strip visual payload — would delete SVG <text> labels
+            remainingText = s.visualAccum.trim()
           } else {
             const sp = splitRedactedThinking(s.textAccum)
             remainingText = stripTextTags(sp.publicText)
@@ -874,6 +979,7 @@ export default function HomePage() {
             if (sessRes.ok) {
               const sessData = await sessRes.json()
               sessionRef.current = sessData.session?.id || null
+              if (sessionRef.current) setActiveSessionId(sessionRef.current)
             }
           }
         }
@@ -895,25 +1001,19 @@ export default function HomePage() {
         )
       }
 
-      // Fallback: if stream ended without a completion event
-      setIsLoading(prev => {
-        if (prev) {
-          const msgId = currentAssistantMsgIdRef.current
-          if (msgId) updateMessage(msgId, { isStreaming: false })
-          resetInProgress()
-        }
-        return false
-      })
-      setInProgressStatusMessage('')
-
+      // Stream closed: if server never sent done/error, still unlock UI
+      const msgId = currentAssistantMsgIdRef.current
+      if (msgId) updateMessage(msgId, { isStreaming: false })
+      resetInProgress()
     } catch (err: unknown) {
       if ((err as Error)?.name !== 'AbortError') {
         const msgId = currentAssistantMsgIdRef.current
         if (msgId) updateMessage(msgId, { content: `连接失败: ${(err as Error)?.message}`, isStreaming: false })
       }
+      resetInProgress()
+    } finally {
       setIsLoading(false)
       setInProgressStatusMessage('')
-      resetInProgress()
     }
   }, [input, isLoading, mode, addMessage, updateMessage, processEvent, resetInProgress, streamSSE, modeRef])
 
@@ -960,6 +1060,7 @@ export default function HomePage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        background: 'var(--bg-primary)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -992,6 +1093,19 @@ export default function HomePage() {
             done={imgExportState === 'done'}
             onClick={handleImgExport}
           />
+          <SessionMenu
+            blinoUrl={BLINO_URL}
+            disabled={isLoading}
+            activeSessionId={activeSessionId}
+            onNewSession={startNewSession}
+            onSwitchSession={switchToSession}
+          />
+          <HeaderBtn
+            label="设置"
+            icon={<Settings width={12} height={12} />}
+            onClick={() => setSettingsOpen(true)}
+            square={false}
+          />
           {/* Theme toggle */}
           <HeaderBtn
             label=""
@@ -1003,7 +1117,7 @@ export default function HomePage() {
       </header>
 
       {/* ── Messages ────────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         <div
           ref={messagesRootRef}
           style={{ maxWidth: 760, margin: '0 auto', padding: '28px 20px 12px' }}
@@ -1037,7 +1151,12 @@ export default function HomePage() {
       </div>
 
       {/* ── Input ───────────────────────────────────────────────────────────── */}
-      <div style={{ flexShrink: 0, borderTop: '0.5px solid var(--border-default)', padding: '14px 20px 16px' }}>
+      <div style={{
+        flexShrink: 0,
+        borderTop: '0.5px solid var(--border-default)',
+        padding: '14px 20px 16px',
+        background: 'var(--bg-primary)',
+      }}>
         <div style={{ maxWidth: 760, margin: '0 auto' }}>
           <div
             style={{
@@ -1118,6 +1237,12 @@ export default function HomePage() {
           }}
         />
       )}
+
+      <ApiSettingsPanel
+        blinoUrl={BLINO_URL}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   )
 }
@@ -1130,6 +1255,7 @@ function HeaderBtn({ label, icon, disabled, done, onClick, square }: {
   const [hov, setHov] = useState(false)
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       onMouseEnter={() => setHov(true)}

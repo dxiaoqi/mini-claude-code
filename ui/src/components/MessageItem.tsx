@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { Copy, Check, Image as ImageIcon, Loader2, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import { PlanProgress, type PlanPhase } from './PlanProgress'
 import { WidgetRenderer, type WidgetState } from './WidgetRenderer'
@@ -9,6 +9,7 @@ import { ProseMarkdown } from './ProseMarkdown'
 import { ToolCallCard, type ToolCallItem } from './ToolCallCard'
 import { exportMessageAsImage } from '@/lib/export-image'
 import type { ContentBlock } from '@/lib/types'
+import { parseVisualBlocksFromText } from '@/lib/parse-visual-in-text'
 
 export type { ToolCallItem }
 
@@ -230,6 +231,27 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
   const thinkText = isGenerating ? inProgress!.thinkText : (message.thinkText ?? '')
   const hasArtifact = !!(isGenerating ? inProgress!.widgets.length > 0 : message.widgets?.length)
 
+  /** Artifacts stream uses message.blocks; Agent/history may embed `<visual>` only in content — parse for rendering. */
+  const blockList = useMemo((): ContentBlock[] => {
+    if (isGenerating && (inProgress?.blocks?.length ?? 0) > 0) {
+      return inProgress!.blocks!
+    }
+    if ((message.blocks?.length ?? 0) > 0) {
+      return message.blocks!
+    }
+    return parseVisualBlocksFromText(message.content ?? '') ?? []
+  }, [isGenerating, inProgress?.blocks, message.blocks, message.content])
+
+  const showProseOnly = !hasArtifact && blockList.length === 0 && !!message.content?.trim()
+
+  /** Per-message badge: visual output reads as Artifacts even if the global toggle is Agent. */
+  const badgeMode: 'agent' | 'artifacts' =
+    blockList.some(b => b.kind === 'visual') ||
+    (message.widgets?.length ?? 0) > 0 ||
+    planPhases.length > 0
+      ? 'artifacts'
+      : (appMode ?? 'artifacts')
+
   const handleCopy = async () => {
     const text = message.content || widgets.map(w => w.content).join('\n\n')
     if (!text) return
@@ -242,7 +264,12 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
     if (!msgRef.current) return
     setImgState('loading')
     try {
-      await exportMessageAsImage(msgRef.current, msgRef.current, message.content.slice(0, 40), message.blocks)
+      await exportMessageAsImage(
+        msgRef.current,
+        msgRef.current,
+        message.content.slice(0, 40),
+        blockList.length ? blockList : message.blocks,
+      )
       setImgState('done')
       setTimeout(() => setImgState('idle'), 2000)
     } catch {
@@ -308,21 +335,19 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
           </svg>
         </div>
         <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-          {appMode === 'artifacts' ? 'Artifacts' : 'Agent'}
+          {badgeMode === 'artifacts' ? 'Artifacts' : 'Agent'}
         </span>
-        {appMode && (
-          <span style={{
-            fontSize: '10px',
-            fontWeight: 500,
-            padding: '1px 6px',
-            borderRadius: 99,
-            background: appMode === 'artifacts' ? 'rgba(99,102,241,0.12)' : 'rgba(20,184,166,0.12)',
-            color: appMode === 'artifacts' ? '#818cf8' : '#2dd4bf',
-            letterSpacing: '0.02em',
-          }}>
-            {appMode === 'artifacts' ? '⬡ Artifacts' : '⬡ Agent'}
-          </span>
-        )}
+        <span style={{
+          fontSize: '10px',
+          fontWeight: 500,
+          padding: '1px 6px',
+          borderRadius: 99,
+          background: badgeMode === 'artifacts' ? 'rgba(99,102,241,0.12)' : 'rgba(20,184,166,0.12)',
+          color: badgeMode === 'artifacts' ? '#818cf8' : '#2dd4bf',
+          letterSpacing: '0.02em',
+        }}>
+          {badgeMode === 'artifacts' ? '⬡ Artifacts' : '⬡ Agent'}
+        </span>
         {isGenerating && inProgress!.statusMessage && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11px', color: 'var(--text-tertiary)' }}>
             <svg width="9" height="9" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin-accent 0.9s linear infinite' }}>
@@ -344,7 +369,7 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
 
         {/* ── Loading dots — show only when truly no content yet ────────── */}
         {(() => {
-          const currentBlocks = isGenerating ? (inProgress?.blocks ?? []) : (message.blocks ?? [])
+          const currentBlocks = blockList
           const hasAnyContent = message.content || hasArtifact || currentBlocks.length > 0
           const waitingForContent = message.isStreaming && !hasAnyContent
           const waitingAfterTools = !message.toolCalls?.length || (!hasRunningTool && currentBlocks.length === 0)
@@ -365,7 +390,7 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
         )}
 
         {/* ── Text (agent / conversational) ────────────────────────────── */}
-        {message.content && !hasArtifact && (
+        {showProseOnly && (
           <ProseMarkdown content={message.content} isStreaming={message.isStreaming} />
         )}
 
@@ -381,11 +406,10 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
 
         {/* ── Visual V2 blocks ──────────────────────────────────────────── */}
         {(() => {
-          const blocks = isGenerating ? (inProgress?.blocks ?? []) : (message.blocks ?? [])
-          if (!blocks.length) return null
+          if (!blockList.length) return null
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {blocks.map(block =>
+              {blockList.map(block =>
                 block.kind === 'text' ? (
                   <ProseMarkdown key={block.id} content={block.content} isStreaming={block.isStreaming} />
                 ) : (
@@ -403,7 +427,7 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
         })()}
 
         {/* ── Legacy widgets ────────────────────────────────────────────── */}
-        {widgets.length > 0 && !(isGenerating ? inProgress?.blocks?.length : message.blocks?.length) && (
+        {widgets.length > 0 && blockList.length === 0 && (
           <div>
             {widgets.map(w => <WidgetRenderer key={w.id} widget={w} />)}
           </div>

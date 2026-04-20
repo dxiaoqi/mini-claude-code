@@ -17,37 +17,49 @@ interface LLMConfig {
 let _cachedConfig: LLMConfig | null = null
 let _cacheExpiry = 0
 
+/** Loopback-only on Blino; Node server fetch has no Origin header. */
 async function getLLMConfig(): Promise<LLMConfig> {
-  // Cache config for 30 seconds to avoid per-request fetches
   if (_cachedConfig && Date.now() < _cacheExpiry) return _cachedConfig
 
   try {
-    const res = await fetch(`${BLINO_URL}/api/config`, { signal: AbortSignal.timeout(3000) })
+    const res = await fetch(`${BLINO_URL}/api/config?secrets=1`, { signal: AbortSignal.timeout(3000) })
     if (res.ok) {
       const data = await res.json()
       const api = data.api || {}
-      const provider = api.provider || 'anthropic'
-      const model = api.model || data.model || process.env.ARTIFACTS_LLM_MODEL || 'claude-3-5-sonnet-20241022'
+      const provider = (api.provider || 'openai') as string
+      const model =
+        api.model ||
+        data.model ||
+        process.env.ARTIFACTS_LLM_MODEL ||
+        (provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o')
 
       if (provider === 'anthropic') {
+        const key =
+          (typeof api.anthropicApiKey === 'string' && api.anthropicApiKey) ||
+          process.env.ARTIFACTS_LLM_API_KEY ||
+          ''
         const config: LLMConfig = {
-          apiKey: process.env.ARTIFACTS_LLM_API_KEY || 'missing-key',
+          apiKey: key || 'missing-key',
           baseURL: api.anthropicBaseUrl || process.env.ARTIFACTS_LLM_BASE_URL,
           model,
         }
         _cachedConfig = config
-        _cacheExpiry = Date.now() + 30_000
-        return config
-      } else {
-        const config: LLMConfig = {
-          apiKey: process.env.ARTIFACTS_LLM_API_KEY || 'missing-key',
-          baseURL: api.openaiBaseUrl || process.env.ARTIFACTS_LLM_BASE_URL,
-          model,
-        }
-        _cachedConfig = config
-        _cacheExpiry = Date.now() + 30_000
+        _cacheExpiry = Date.now() + 5000
         return config
       }
+
+      const key =
+        (typeof api.openaiApiKey === 'string' && api.openaiApiKey) ||
+        process.env.ARTIFACTS_LLM_API_KEY ||
+        ''
+      const config: LLMConfig = {
+        apiKey: key || 'missing-key',
+        baseURL: api.openaiBaseUrl || process.env.ARTIFACTS_LLM_BASE_URL,
+        model,
+      }
+      _cachedConfig = config
+      _cacheExpiry = Date.now() + 5000
+      return config
     }
   } catch {
     // Fall through to env var fallback
@@ -56,7 +68,7 @@ async function getLLMConfig(): Promise<LLMConfig> {
   return {
     apiKey: process.env.ARTIFACTS_LLM_API_KEY ?? 'missing-key',
     baseURL: process.env.ARTIFACTS_LLM_BASE_URL,
-    model: process.env.ARTIFACTS_LLM_MODEL || 'claude-3-5-sonnet-20241022',
+    model: process.env.ARTIFACTS_LLM_MODEL || 'gpt-4o',
   }
 }
 
