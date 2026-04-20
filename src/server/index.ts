@@ -237,6 +237,49 @@ export function createMiniClaudeServer(config: ServerConfig) {
       return
     }
 
+    // ── GET /api/visual-context  (visual protocol for Artifacts mode) ──
+    if (method === 'GET' && path === '/api/visual-context') {
+      try {
+        const { readFileSync } = await import('node:fs')
+        const { resolve: rp } = await import('node:path')
+        const { fileURLToPath: fu } = await import('node:url')
+        // Resolve skill-pack relative to this file (works in both dev and prod)
+        // dev:  src/server/index.ts  → ../../ui/skill-pack
+        // prod: dist/server/index.js → ../../ui/skill-pack
+        const fileDir = rp(fu(import.meta.url), '..')
+        const skillRoot = rp(fileDir, '..', '..', 'ui', 'skill-pack')
+
+        const read = (name: string) => {
+          try { return readFileSync(rp(skillRoot, name), 'utf-8') } catch { return '' }
+        }
+
+        const skillMd = read('SKILL.md')
+        const visualProtocol = read('visual-protocol.md')
+
+        if (!visualProtocol) {
+          json(res, { content: null }, 404)
+          return
+        }
+
+        const overrideRules = `\
+## ⚠️ ARTIFACTS MODE — VISUAL GENERATION OVERRIDE RULES (HIGHEST PRIORITY)
+
+1. **NEVER use Bash, ShellTool, or any tool to install graphviz, dot, plantuml, or any diagram software.**
+2. **NEVER use FileWrite or any file tool to produce diagram files (.dot, .svg, .png).**
+3. **When the user asks for a diagram, chart, or any visual: ALWAYS generate it inline using \`<visual type="svg">\` or \`<visual type="html">\` tags.**
+4. **Tool calls are allowed for READ-ONLY context gathering (FileRead, Glob, Grep) before drawing.**
+5. **Correct pattern:** (optional read-only tools) → output \`<visual type="svg">...</visual>\``
+
+        const content = [overrideRules, '---', '## Visual Output Protocol', visualProtocol]
+          .join('\n\n')
+
+        json(res, { content })
+      } catch (err) {
+        json(res, { content: null, error: (err as Error).message }, 500)
+      }
+      return
+    }
+
     // ── GET /api/health ──
     if (method === 'GET' && path === '/api/health') {
       json(res, {

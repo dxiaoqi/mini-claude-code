@@ -142,7 +142,7 @@ export default function HomePage() {
     artifactsSessionPromiseRef.current = (async () => {
       let systemPromptAddendum: string | undefined
       try {
-        const ctxRes = await fetch('/api/visual-context')
+        const ctxRes = await fetch(`${MINI_CLAUDE_URL}/api/visual-context`)
         if (ctxRes.ok) {
           const data = await ctxRes.json()
           systemPromptAddendum = data.content ?? undefined

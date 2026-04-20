@@ -56,18 +56,20 @@ OPENAI_BASE_URL=https://api.example.com/v1
 
 **settings.json 全量字段：**
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `api.provider` | 提供商：`anthropic` / `openai` | `"openai"` |
-| `api.anthropicApiKey` | Anthropic API Key | `"sk-ant-..."` |
-| `api.anthropicBaseUrl` | Anthropic Base URL（可选） | `"https://..."` |
-| `api.openaiApiKey` | OpenAI 兼容 API Key | `"sk-..."` |
-| `api.openaiBaseUrl` | OpenAI 兼容 Base URL | `"https://.../v1"` |
-| `api.model` | 默认模型 | `"claude-sonnet-4-20250514"` |
-| `api.fallbackModel` | 降级模型 | `"claude-haiku-3"` |
-| `permissionMode` | 权限模式：`default` / `auto` / `bypass` | `"default"` |
-| `devTrace` | 开启调试 trace 输出 | `true` |
-| `mcpServers` | MCP 服务器配置（见下方） | `{...}` |
+
+| 字段                     | 说明                                 | 示例                           |
+| ---------------------- | ---------------------------------- | ---------------------------- |
+| `api.provider`         | 提供商：`anthropic` / `openai`         | `"openai"`                   |
+| `api.anthropicApiKey`  | Anthropic API Key                  | `"sk-ant-..."`               |
+| `api.anthropicBaseUrl` | Anthropic Base URL（可选）             | `"https://..."`              |
+| `api.openaiApiKey`     | OpenAI 兼容 API Key                  | `"sk-..."`                   |
+| `api.openaiBaseUrl`    | OpenAI 兼容 Base URL                 | `"https://.../v1"`           |
+| `api.model`            | 默认模型                               | `"claude-sonnet-4-20250514"` |
+| `api.fallbackModel`    | 降级模型                               | `"claude-haiku-3"`           |
+| `permissionMode`       | 权限模式：`default` / `auto` / `bypass` | `"default"`                  |
+| `devTrace`             | 开启调试 trace 输出                      | `true`                       |
+| `mcpServers`           | MCP 服务器配置（见下方）                     | `{...}`                      |
+
 
 ---
 
@@ -126,21 +128,23 @@ mini-claude --serve --port 3001
 mini-claude [options] [prompt]
 ```
 
-| 参数 | 说明 |
-|------|------|
-| `[prompt]` | 初始提示词（可选，省略则进入 REPL） |
-| `--api-key <key>` | API Key |
-| `--base-url <url>` | API Base URL |
-| `--model <model>` | 模型名称 |
-| `--provider <type>` | API Provider：`anthropic` 或 `openai` |
-| `-p, --pipe` | 管道模式：从 stdin 读取，自动批准工具 |
-| `--bypass-permissions` | 自动批准所有工具调用 |
-| `--coordinator` | Coordinator 多 Agent 模式 |
-| `--resume [id]` | 恢复历史 session（省略 id 则选择最近一个） |
-| `--serve` | 仅启动 HTTP Server（port 3001） |
-| `--tui` | 启动 HTTP Server + Web UI，并打开浏览器 |
-| `--port <port>` | HTTP Server 端口（默认 3001） |
-| `--host <host>` | HTTP Server 监听地址（默认 localhost） |
+
+| 参数                     | 说明                                  |
+| ---------------------- | ----------------------------------- |
+| `[prompt]`             | 初始提示词（可选，省略则进入 REPL）                |
+| `--api-key <key>`      | API Key                             |
+| `--base-url <url>`     | API Base URL                        |
+| `--model <model>`      | 模型名称                                |
+| `--provider <type>`    | API Provider：`anthropic` 或 `openai` |
+| `-p, --pipe`           | 管道模式：从 stdin 读取，自动批准工具              |
+| `--bypass-permissions` | 自动批准所有工具调用                          |
+| `--coordinator`        | Coordinator 多 Agent 模式              |
+| `--resume [id]`        | 恢复历史 session（省略 id 则选择最近一个）         |
+| `--serve`              | 仅启动 HTTP Server（port 3001）          |
+| `--tui`                | 启动 HTTP Server + Web UI，并打开浏览器      |
+| `--port <port>`        | HTTP Server 端口（默认 3001）             |
+| `--host <host>`        | HTTP Server 监听地址（默认 localhost）      |
+
 
 ---
 
@@ -148,15 +152,17 @@ mini-claude [options] [prompt]
 
 在交互模式中输入以 `/` 开头的命令：
 
-| 命令 | 说明 |
-|------|------|
-| `/exit` | 退出 |
-| `/clear` | 清空会话（重置消息、token、权限规则、快照） |
-| `/compact` | 手动触发上下文压缩（调用 LLM 生成摘要） |
-| `/status` | 查看当前 token 数、成本、消息数 |
-| `/model <name>` | 切换模型 |
-| `/undo [file]` | 回滚文件修改（省略参数列出可回滚文件） |
-| `/resume` | 恢复历史 session |
+
+| 命令              | 说明                       |
+| --------------- | ------------------------ |
+| `/exit`         | 退出                       |
+| `/clear`        | 清空会话（重置消息、token、权限规则、快照） |
+| `/compact`      | 手动触发上下文压缩（调用 LLM 生成摘要）   |
+| `/status`       | 查看当前 token 数、成本、消息数      |
+| `/model <name>` | 切换模型                     |
+| `/undo [file]`  | 回滚文件修改（省略参数列出可回滚文件）      |
+| `/resume`       | 恢复历史 session             |
+
 
 ---
 
@@ -172,6 +178,7 @@ mini-claude [options] [prompt]
 ### 工具调用面板
 
 生成过程中，工具调用会显示在消息顶部的折叠面板内：
+
 - 运行时：走马灯滚动显示当前工具名
 - 完成后：自动折叠，显示调用摘要（`N 个工具调用 · bash · glob · ...`）
 - 点击可展开查看每个工具的输入/输出详情
@@ -198,31 +205,35 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ### 核心工具（始终加载）
 
-| 工具 | 说明 |
-|------|------|
-| **Bash** | Shell 命令执行（含 4 级危险分类） |
-| **FileRead** | 读取文件（支持行范围） |
-| **FileEdit** | 精确字符串替换编辑 |
-| **FileWrite** | 创建/覆盖文件 |
-| **Glob** | 文件名模式搜索 |
-| **Grep** | 文件内容正则搜索（rg 优先，grep fallback） |
-| **TodoWrite** | 任务列表管理 |
-| **AskUser** | 向用户提问等待回答 |
-| **Skill** | 执行自定义 Skill 工作流 |
-| **Agent** | 派生子 Agent 独立执行任务 |
-| **ToolSearch** | 发现 deferred 工具 |
+
+| 工具             | 说明                            |
+| -------------- | ----------------------------- |
+| **Bash**       | Shell 命令执行（含 4 级危险分类）         |
+| **FileRead**   | 读取文件（支持行范围）                   |
+| **FileEdit**   | 精确字符串替换编辑                     |
+| **FileWrite**  | 创建/覆盖文件                       |
+| **Glob**       | 文件名模式搜索                       |
+| **Grep**       | 文件内容正则搜索（rg 优先，grep fallback） |
+| **TodoWrite**  | 任务列表管理                        |
+| **AskUser**    | 向用户提问等待回答                     |
+| **Skill**      | 执行自定义 Skill 工作流               |
+| **Agent**      | 派生子 Agent 独立执行任务              |
+| **ToolSearch** | 发现 deferred 工具                |
+
 
 ### Deferred 工具（通过 ToolSearch 按需加载）
 
-| 工具 | 说明 |
-|------|------|
-| **WebFetch** | 网页抓取 + HTML→Markdown 转换 |
-| **WebSearch** | 网络搜索（需配置 Tavily API Key） |
-| **NotebookEdit** | Jupyter Notebook 编辑 |
-| **ImageRead** | 图片读取（base64 → Vision API） |
-| **PDFRead** | PDF 文本提取 |
-| **ListMcpResources** | 列出 MCP 资源 |
-| **ReadMcpResource** | 读取 MCP 资源 |
+
+| 工具                   | 说明                        |
+| -------------------- | ------------------------- |
+| **WebFetch**         | 网页抓取 + HTML→Markdown 转换   |
+| **WebSearch**        | 网络搜索（需配置 Tavily API Key）  |
+| **NotebookEdit**     | Jupyter Notebook 编辑       |
+| **ImageRead**        | 图片读取（base64 → Vision API） |
+| **PDFRead**          | PDF 文本提取                  |
+| **ListMcpResources** | 列出 MCP 资源                 |
+| **ReadMcpResource**  | 读取 MCP 资源                 |
+
 
 ---
 
@@ -230,12 +241,14 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 通过 `--permission-mode` 或 `settings.json` 中的 `permissionMode` 设置：
 
-| 模式 | 说明 |
-|------|------|
+
+| 模式        | 说明                |
+| --------- | ----------------- |
 | `default` | 高风险操作弹窗确认，低风险自动通过 |
-| `auto` | 对话型任务自动通过大部分操作 |
-| `plan` | 先制定计划，执行前批量确认 |
-| `bypass` | 跳过所有权限检查（自动化场景） |
+| `auto`    | 对话型任务自动通过大部分操作    |
+| `plan`    | 先制定计划，执行前批量确认     |
+| `bypass`  | 跳过所有权限检查（自动化场景）   |
+
 
 ---
 

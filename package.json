@@ -2,15 +2,48 @@
   "name": "mini-claude-code",
   "version": "0.1.0",
   "type": "module",
-  "description": "A minimal but capable AI coding agent, inspired by Claude Code",
+  "description": "A minimal but capable AI coding agent with web UI, inspired by Claude Code",
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "coding-assistant",
+    "claude",
+    "anthropic",
+    "openai",
+    "mcp",
+    "tool-use"
+  ],
+  "homepage": "https://github.com/dxiaoqi/mini-claude-code",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dxiaoqi/mini-claude-code.git"
+  },
+  "license": "MIT",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "bin": {
     "mini-claude": "bin/mini-claude.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "ui-standalone",
+    "ui/skill-pack",
+    "scripts/postbuild.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsc && node scripts/postbuild.js",
-    "build:web": "cd ui && npm run build && cp -r .next/out ../web-dist 2>/dev/null || cp -r out ../web-dist 2>/dev/null || true",
+    "build:web": "node scripts/build-web.js",
+    "build:all": "npm run build && npm run build:web",
+    "prepublishOnly": "npm run build:all",
     "dev:web": "concurrently --names \"backend,ui\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts --serve --port 3001\" \"cd ui && npm run dev -- --port 3000\"",
     "tui": "concurrently --names \"backend,ui\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts --serve --port 3001\" \"cd ui && npm run dev -- --port 3000\"",
     "ui": "cd ui && npm run dev -- --port 3000",
@@ -28,9 +61,6 @@
     "eval:quick": "tsx tests/eval/run.ts --level S --no-llm",
     "eval:full": "tsx tests/eval/run.ts",
     "eval:fixture": "tsx tests/eval/test-fixture.ts"
-  },
-  "engines": {
-    "node": ">=20.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",

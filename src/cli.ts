@@ -422,34 +422,58 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
     await server.start()
 
-    // --tui: 同时启动 ui/ Next.js 开发服务器，并打开浏览器
+    // --tui: start the UI server and open the browser
     if (isTui) {
       const { spawn } = await import('node:child_process')
-      const { resolve: resolvePath2 } = await import('node:path')
+      const { resolve: resolvePath2, join: joinPath } = await import('node:path')
       const { fileURLToPath: fu2 } = await import('node:url')
+      const { existsSync: es2 } = await import('node:fs')
       const __dir2 = resolvePath2(fu2(import.meta.url), '..')
-      const uiDir = resolvePath2(__dir2, '..', 'ui')
+      // In prod dist/ lives one level below package root; in dev src/ lives one level below too
+      const pkgRoot = resolvePath2(__dir2, '..')
 
-      console.log(chalk.cyan(`\n🖥  Starting UI dev server (port ${uiPort})…`))
-      const uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
-        cwd: uiDir,
-        stdio: 'inherit',
-        shell: true,
-      })
+      const standaloneServer = joinPath(pkgRoot, 'ui-standalone', 'server.js')
+      const uiDir = joinPath(pkgRoot, 'ui')
+
+      let uiProc: ReturnType<typeof spawn>
+
+      if (es2(standaloneServer)) {
+        // ── Production: pre-built standalone server ────────────────────────
+        console.log(chalk.cyan(`\n🖥  Starting UI server (port ${uiPort})…`))
+        uiProc = spawn(process.execPath, [standaloneServer], {
+          cwd: pkgRoot,
+          stdio: 'inherit',
+          env: {
+            ...process.env,
+            PORT: String(uiPort),
+            HOSTNAME: host,
+            // Pass the actual backend URL so the standalone server can relay it
+            MINI_CLAUDE_API_URL: `http://${host}:${port}`,
+          },
+        })
+      } else {
+        // ── Development: Next.js dev server ───────────────────────────────
+        console.log(chalk.cyan(`\n🖥  Starting UI dev server (port ${uiPort})…`))
+        uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
+          cwd: uiDir,
+          stdio: 'inherit',
+          shell: true,
+        })
+      }
 
       uiProc.on('error', (err) => {
         console.error(chalk.yellow(`⚠ UI process error: ${err.message}`))
       })
 
-      // Kill UI process when backend shuts down
-      process.on('exit', () => uiProc.kill())
+      process.on('exit', () => { try { uiProc.kill() } catch { /* ignore */ } })
 
-      // Wait a moment for Next.js to start, then open browser
+      // Wait for UI to be ready, then open browser
       const uiUrl = `http://${host}:${uiPort}`
+      const warmUpMs = es2(standaloneServer) ? 2000 : 4000
       setTimeout(async () => {
         console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
         await openBrowser(uiUrl)
-      }, 4000)
+      }, warmUpMs)
     }
 
     return  // 保持进程运行
