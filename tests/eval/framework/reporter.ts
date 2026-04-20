@@ -137,7 +137,7 @@ async function generateHTMLReport(suite: TestSuiteResult, dir: string): Promise<
   </style>
 </head>
 <body>
-  <h1>🧪 /lino Evaluation</h1>
+  <h1>🧪 /blino Evaluation</h1>
   <p style="color:#888">${suite.runAt} · ${suite.totalCases} cases</p>
 
   <div class="summary">

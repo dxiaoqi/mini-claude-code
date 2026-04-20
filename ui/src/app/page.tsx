@@ -14,7 +14,7 @@ import {
 import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
 
-const LINO_URL = process.env.NEXT_PUBLIC_LINO_URL || 'http://localhost:3001'
+const BLINO_URL = process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
 
 interface StreamMeta { conversationId?: string; artifactId?: string; turnId?: string; sessionId?: string }
 
@@ -142,14 +142,14 @@ export default function HomePage() {
     artifactsSessionPromiseRef.current = (async () => {
       let systemPromptAddendum: string | undefined
       try {
-        const ctxRes = await fetch(`${LINO_URL}/api/visual-context`)
+        const ctxRes = await fetch(`${BLINO_URL}/api/visual-context`)
         if (ctxRes.ok) {
           const data = await ctxRes.json()
           systemPromptAddendum = data.content ?? undefined
         }
       } catch { /* skip */ }
       try {
-        const sessRes = await fetch(`${LINO_URL}/api/sessions`, {
+        const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(systemPromptAddendum ? { systemPromptAddendum } : {}),
@@ -823,7 +823,7 @@ export default function HomePage() {
 
     try {
       if (mode === 'agent' || mode === 'artifacts') {
-        // ── Agent / Artifacts mode: directly connect to lino HTTP server ─
+        // ── Agent / Artifacts mode: directly connect to blino HTTP server ─
         const sessionRef = mode === 'agent' ? agentSessionIdRef : artifactsSessionIdRef
 
         if (!sessionRef.current) {
@@ -832,7 +832,7 @@ export default function HomePage() {
             await artifactsSessionPromiseRef.current
           } else {
             // Agent mode or fallback: create session on-demand (no addendum needed)
-            const sessRes = await fetch(`${LINO_URL}/api/sessions`, {
+            const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({}),
@@ -848,7 +848,7 @@ export default function HomePage() {
         if (!sessionId) throw new Error('Failed to create session')
 
         await streamSSE(
-          `${LINO_URL}/api/sessions/${sessionId}/chat`,
+          `${BLINO_URL}/api/sessions/${sessionId}/chat`,
           { message: userText },
           abortRef.current.signal,
         )
@@ -1076,7 +1076,7 @@ export default function HomePage() {
           request={permissionRequest}
           onRespond={async (decision) => {
             setPermissionRequest(null)
-            await fetch(`${LINO_URL}/api/permission/${permissionRequest.requestId}/respond`, {
+            await fetch(`${BLINO_URL}/api/permission/${permissionRequest.requestId}/respond`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ decision }),

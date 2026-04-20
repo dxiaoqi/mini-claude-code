@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * lino — global CLI entry point
+ * blino — global CLI entry point
  * 
  * Dev mode:  runs tsx src/cli.ts (auto-detected when dist/ doesn't exist)
  * Prod mode: runs dist/cli.js (after npm run build)

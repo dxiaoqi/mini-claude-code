@@ -1,7 +1,7 @@
 /**
  * state/transcript.ts — Transcript 持久化
  *
- * 将会话消息以 JSONL 追加写入 ~/.lino/projects 下的会话文件。
+ * 将会话消息以 JSONL 追加写入 ~/.blino/projects 下的会话文件。
  */
 import { writeFile, mkdir, readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
@@ -10,12 +10,12 @@ import { handleSilentError } from '../errors/handlers.js'
 
 /**
  * Get the transcript directory for a project.
- * ~/.lino/projects/<hash>/
+ * ~/.blino/projects/<hash>/
  */
 function getTranscriptDir(projectRoot: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.lino', 'projects', hash)
+  return resolve(homeDir, '.blino', 'projects', hash)
 }
 
 function getTranscriptPath(projectRoot: string, sessionId: string): string {

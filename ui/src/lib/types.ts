@@ -189,7 +189,7 @@ export interface Session {
 
 // ─── Unified UI Events (Server → Client, wire format) ─────────────────────────
 // Naming: namespace.verb, dot-separated, present tense.
-// Mirrors /lino UIEvent type.
+// Mirrors /blino UIEvent type.
 
 export type UIEventType =
   // ── Agent mode ──

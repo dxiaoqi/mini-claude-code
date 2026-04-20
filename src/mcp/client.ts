@@ -48,7 +48,7 @@ export class MCPClientManager {
     })
 
     const client = new Client(
-      { name: '/lino', version: '0.1.0' },
+      { name: '/blino', version: '0.1.0' },
       { capabilities: {} },
     )
 
@@ -91,7 +91,7 @@ export class MCPClientManager {
     const transport = new SSEClientTransport(new URL(config.url))
 
     const client = new Client(
-      { name: '/lino', version: '0.1.0' },
+      { name: '/blino', version: '0.1.0' },
       { capabilities: {} },
     )
 

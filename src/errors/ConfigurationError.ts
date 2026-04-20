@@ -3,9 +3,9 @@
  *
  * Errors related to configuration issues.
  */
-import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
+import { BlinoError, ErrorCategory, ErrorContext, SuggestedAction } from './BlinoError.js'
 
-export class ConfigurationError extends LinoError {
+export class ConfigurationError extends BlinoError {
   constructor(
     message: string,
     context: ErrorContext = {},

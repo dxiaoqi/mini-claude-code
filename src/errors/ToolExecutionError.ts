@@ -3,9 +3,9 @@
  *
  * Errors related to tool execution failures.
  */
-import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
+import { BlinoError, ErrorCategory, ErrorContext, SuggestedAction } from './BlinoError.js'
 
-export class ToolExecutionError extends LinoError {
+export class ToolExecutionError extends BlinoError {
   constructor(
     message: string,
     context: ErrorContext = {},

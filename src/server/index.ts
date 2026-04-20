@@ -1,7 +1,7 @@
 /**
  * server/index.ts — HTTP Server 主入口
  *
- * 将 /lino 暴露为 HTTP 服务，供 Next.js 前端调用。
+ * 将 /blino 暴露为 HTTP 服务，供 Next.js 前端调用。
  * 每个 session 持有独立的 AgentEngine 实例和 SSEAdapter。
  *
  * API 路由：
@@ -63,7 +63,7 @@ export interface ServerConfig {
   webDistPath?: string
 }
 
-export function createLinoServer(config: ServerConfig) {
+export function createBlinoServer(config: ServerConfig) {
   const sessions = new Map<string, SessionEntry>()
 
   // ── 工具函数 ──
@@ -451,7 +451,7 @@ export function createLinoServer(config: ServerConfig) {
       return
     }
 
-    // ── POST /api/artifacts/save  (save visual block to .lino/artifacts/) ──
+    // ── POST /api/artifacts/save  (save visual block to .blino/artifacts/) ──
     if (method === 'POST' && path === '/api/artifacts/save') {
       try {
         const body = await readBody(req) as {
@@ -464,7 +464,7 @@ export function createLinoServer(config: ServerConfig) {
 
         const { mkdir: mkdirFn, writeFile: writeFn } = await import('node:fs/promises')
         const { resolve: resolvePath } = await import('node:path')
-        const artifactsDir = resolvePath(config.cwd, '.lino', 'artifacts')
+        const artifactsDir = resolvePath(config.cwd, '.blino', 'artifacts')
         await mkdirFn(artifactsDir, { recursive: true })
 
         const ext = body.visualType === 'svg' ? 'svg' : 'html'
@@ -515,7 +515,7 @@ export function createLinoServer(config: ServerConfig) {
     start(): Promise<void> {
       return new Promise((resolve) => {
         server.listen(config.port, config.host, () => {
-          console.log(`\n🌐 /lino server running at http://${config.host}:${config.port}`)
+          console.log(`\n🌐 /blino server running at http://${config.host}:${config.port}`)
           resolve()
         })
       })

@@ -1,8 +1,8 @@
 {
-  "name": "lino",
+  "name": "blino",
   "version": "0.1.0",
   "type": "module",
-  "description": "Lino — AI coding agent with web UI, tool use, MCP and visual diagram generation",
+  "description": "Blino — AI coding agent with web UI, tool use, MCP and visual diagram generation",
   "keywords": [
     "ai",
     "agent",
@@ -13,12 +13,12 @@
     "openai",
     "mcp",
     "tool-use",
-    "lino"
+    "blino"
   ],
-  "homepage": "https://github.com/dxiaoqi/lino",
+  "homepage": "https://github.com/dxiaoqi/blino",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dxiaoqi/lino.git"
+    "url": "https://github.com/dxiaoqi/blino.git"
   },
   "license": "MIT",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "lino": "bin/lino.js"
+    "blino": "bin/blino.js"
   },
   "files": [
     "dist",

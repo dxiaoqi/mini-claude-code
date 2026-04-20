@@ -53,7 +53,7 @@ export async function* runCoordinatorMode(
   config: CoordinatorConfig,
 ): AsyncGenerator<StreamEvent, AgentLoopResult> {
   // Create scratchpad directory for cross-worker communication
-  const scratchpadDir = await mkdtemp(join(tmpdir(), 'lino-scratchpad-'))
+  const scratchpadDir = await mkdtemp(join(tmpdir(), 'blino-scratchpad-'))
 
   // Build coordinator-specific system prompt
   const coordinatorSystemPrompt = getCoordinatorSystemPrompt()
@@ -166,6 +166,6 @@ function escapeXml(str: string): string {
  * Detect if the current session should use coordinator mode.
  */
 export function isCoordinatorMode(): boolean {
-  return process.env.LINO_COORDINATOR === '1' ||
-    process.env.LINO_COORDINATOR === 'true'
+  return process.env.BLINO_COORDINATOR === '1' ||
+    process.env.BLINO_COORDINATOR === 'true'
 }

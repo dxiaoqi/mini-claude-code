@@ -54,7 +54,7 @@ export async function applyToolResultBudget(
       try {
         const overflowDir = resolve(
           process.env.HOME || '/tmp',
-          '.lino', 'overflow', sessionId,
+          '.blino', 'overflow', sessionId,
         )
         await mkdir(overflowDir, { recursive: true })
 

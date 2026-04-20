@@ -22,9 +22,9 @@ interface MCPServerConfigRaw {
 
 /**
  * Load and merge MCP configs from three levels:
- *   1. User-level:   ~/.lino/settings.json
- *   2. Project-level: .lino/settings.json
- *   3. Local-level:   .lino/settings.local.json (not committed)
+ *   1. User-level:   ~/.blino/settings.json
+ *   2. Project-level: .blino/settings.json
+ *   3. Local-level:   .blino/settings.local.json (not committed)
  *
  * Later levels override earlier ones (local > project > user).
  */
@@ -34,9 +34,9 @@ export async function loadMCPConfigs(
   const homeDir = process.env.HOME || process.env.USERPROFILE || ''
 
   const configPaths = [
-    homeDir ? resolve(homeDir, '.lino', 'settings.json') : null,
-    resolve(projectRoot, '.lino', 'settings.json'),
-    resolve(projectRoot, '.lino', 'settings.local.json'),
+    homeDir ? resolve(homeDir, '.blino', 'settings.json') : null,
+    resolve(projectRoot, '.blino', 'settings.json'),
+    resolve(projectRoot, '.blino', 'settings.local.json'),
   ].filter(Boolean) as string[]
 
   const merged: Record<string, MCPServerConfigRaw> = {}

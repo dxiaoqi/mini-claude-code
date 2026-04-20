@@ -2,7 +2,7 @@
  * sessionMemory.ts — 跨会话 Session Memory
  *
  * 每次压缩后将摘要和结构化元数据持久化到：
- *   ~/.lino/memory/<projectHash>/memory.json
+ *   ~/.blino/memory/<projectHash>/memory.json
  *
  * 在新会话启动时，可选择注入上次会话的摘要作为初始上下文，
  * 避免从头重建对话背景。
@@ -68,7 +68,7 @@ function simpleHash(str: string): string {
 function getMemoryPath(projectRoot: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.lino', 'memory', hash, 'memory.json')
+  return resolve(homeDir, '.blino', 'memory', hash, 'memory.json')
 }
 
 // ─── 元数据提取（从 messages 中自动提取结构化信息）───────────────────────────────

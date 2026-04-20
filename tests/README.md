@@ -1,6 +1,6 @@
-# Lino - Agent Ability Tests
+# Blino - Agent Ability Tests
 
-Test suite to evaluate and validate the capabilities of the /lino agent.
+Test suite to evaluate and validate the capabilities of the /blino agent.
 
 ## Agent Loop 能力评估 (Agent Loop Capability Evaluation)
 

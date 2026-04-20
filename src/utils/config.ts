@@ -4,12 +4,12 @@
  * 读写三级 JSON 配置，合并优先级与权限规则持久化。
  * 配置文件路径（与 Claude Code 对齐）：
  *
- *   全局级: ~/.lino/settings.json        (用户目录，跨项目)
- *   项目级: .lino/settings.json          (提交到 git，团队共享)
- *   本地级: .lino/settings.local.json    (不提交，覆盖项目配置)
+ *   全局级: ~/.blino/settings.json        (用户目录，跨项目)
+ *   项目级: .blino/settings.json          (提交到 git，团队共享)
+ *   本地级: .blino/settings.local.json    (不提交，覆盖项目配置)
  *
  * API Key 配置示例：
- *   ~/.lino/settings.json
+ *   ~/.blino/settings.json
  *   {
  *     "api": {
  *       "provider": "anthropic",
@@ -31,15 +31,15 @@ import type { PermissionRule, Settings } from '../types.js'
 
 export function getUserConfigPath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(home, '.lino', 'settings.json')
+  return resolve(home, '.blino', 'settings.json')
 }
 
 export function getProjectConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.lino', 'settings.json')
+  return resolve(projectRoot, '.blino', 'settings.json')
 }
 
 export function getLocalConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.lino', 'settings.local.json')
+  return resolve(projectRoot, '.blino', 'settings.local.json')
 }
 
 // ── API Key 配置结构 ──
@@ -238,7 +238,7 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
   return result
 }
 
-/** 打印当前有效配置（用于 lino config show） */
+/** 打印当前有效配置（用于 blino config show） */
 export async function showConfig(projectRoot: string): Promise<void> {
   const cfg = await resolveApiConfig(projectRoot)
   const masked = cfg.apiKey

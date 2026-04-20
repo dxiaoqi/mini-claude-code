@@ -3,9 +3,9 @@
  *
  * Errors related to input validation and schema violations.
  */
-import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
+import { BlinoError, ErrorCategory, ErrorContext, SuggestedAction } from './BlinoError.js'
 
-export class ValidationError extends LinoError {
+export class ValidationError extends BlinoError {
   constructor(
     message: string,
     context: ErrorContext = {},

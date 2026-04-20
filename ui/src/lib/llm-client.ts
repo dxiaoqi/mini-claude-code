@@ -1,12 +1,12 @@
 /**
  * LLM Client — Visual mode (Orchestrator) LLM calls
- * Reads provider/model/key config from Lino's /api/config at runtime.
+ * Reads provider/model/key config from Blino's /api/config at runtime.
  * Falls back to ARTIFACTS_LLM_* env vars for standalone development.
  */
 
 import OpenAI from 'openai'
 
-const LINO_URL = process.env.LINO_API_URL || process.env.NEXT_PUBLIC_LINO_URL || 'http://localhost:3001'
+const BLINO_URL = process.env.BLINO_API_URL || process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
 
 interface LLMConfig {
   apiKey: string
@@ -22,7 +22,7 @@ async function getLLMConfig(): Promise<LLMConfig> {
   if (_cachedConfig && Date.now() < _cacheExpiry) return _cachedConfig
 
   try {
-    const res = await fetch(`${LINO_URL}/api/config`, { signal: AbortSignal.timeout(3000) })
+    const res = await fetch(`${BLINO_URL}/api/config`, { signal: AbortSignal.timeout(3000) })
     if (res.ok) {
       const data = await res.json()
       const api = data.api || {}

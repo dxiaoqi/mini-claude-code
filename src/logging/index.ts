@@ -1,7 +1,7 @@
 /**
  * Logging Module
  *
- * Centralized logging system for /lino.
+ * Centralized logging system for /blino.
  *
  * Exports:
  * - Logger class for direct instantiation

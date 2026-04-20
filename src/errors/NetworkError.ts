@@ -3,10 +3,10 @@
  *
  * Errors related to network operations and API calls.
  */
-import { LinoError, ErrorCategory, ErrorContext, SuggestedAction } from './LinoError.js'
+import { BlinoError, ErrorCategory, ErrorContext, SuggestedAction } from './BlinoError.js'
 import type { ErrorMetadata } from './types.js'
 
-export class NetworkError extends LinoError {
+export class NetworkError extends BlinoError {
   constructor(
     message: string,
     context: ErrorContext = {},
@@ -17,7 +17,7 @@ export class NetworkError extends LinoError {
     if (statusCode === 401) {
       suggestedActions.push({
         title: 'Check API Key',
-        description: 'Verify your API key is correct in ~/.lino/settings.json',
+        description: 'Verify your API key is correct in ~/.blino/settings.json',
       })
     } else if (statusCode === 429) {
       suggestedActions.push({

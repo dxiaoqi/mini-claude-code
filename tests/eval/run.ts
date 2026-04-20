@@ -80,7 +80,7 @@ async function main() {
   await mkdir(config.outputDir, { recursive: true })
 
   console.log(chalk.bold.cyan('\n╔══════════════════════════════════════════╗'))
-  console.log(chalk.bold.cyan('║    /lino Evaluation Suite      ║'))
+  console.log(chalk.bold.cyan('║    /blino Evaluation Suite      ║'))
   console.log(chalk.bold.cyan('╚══════════════════════════════════════════╝'))
   console.log(chalk.dim(`Model: ${config.model} | Cases: ${allCases.length} | LLM Judge: ${config.llmJudgeEnabled ? 'on' : 'off (--no-llm)'}`))
   console.log(chalk.dim(`Output: ${config.outputDir}\n`))

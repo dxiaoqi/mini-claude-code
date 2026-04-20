@@ -1,7 +1,7 @@
 /**
  * Skill 加载器 — Skill 加载器（YAML frontmatter 解析）
  *
- * 从用户与项目目录下的 .lino/skills 加载 Markdown 技能文件，解析 YAML
+ * 从用户与项目目录下的 .blino/skills 加载 Markdown 技能文件，解析 YAML
  * frontmatter（name、description、allowedTools）与正文 prompt，合并为 SkillDefinition 列表。
  */
 import { readFile, readdir, stat } from 'node:fs/promises'
@@ -17,7 +17,7 @@ export interface SkillDefinition {
 }
 
 /**
- * Load skills from .lino/skills/ directories.
+ * Load skills from .blino/skills/ directories.
  * Skills are Markdown files with YAML frontmatter.
  *
  * Example:
@@ -36,13 +36,13 @@ export async function loadSkills(projectRoot: string): Promise<SkillDefinition[]
 
   // User-level skills
   if (homeDir) {
-    const userSkillsDir = resolve(homeDir, '.lino', 'skills')
+    const userSkillsDir = resolve(homeDir, '.blino', 'skills')
     const userSkills = await loadSkillsFromDir(userSkillsDir, 'user')
     skills.push(...userSkills)
   }
 
   // Project-level skills
-  const projectSkillsDir = resolve(projectRoot, '.lino', 'skills')
+  const projectSkillsDir = resolve(projectRoot, '.blino', 'skills')
   const projectSkills = await loadSkillsFromDir(projectSkillsDir, 'project')
   skills.push(...projectSkills)
 
