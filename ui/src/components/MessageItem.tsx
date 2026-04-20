@@ -48,6 +48,52 @@ interface Props {
 
 type ActionState = 'idle' | 'loading' | 'done'
 
+function ThinkBubble({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 200
+  const shown = !long || open ? text : `${text.slice(0, 180)}…`
+  return (
+    <div
+      className="animate-fade-in"
+      style={{
+        marginBottom: 14,
+        padding: '9px 13px',
+        borderRadius: 'var(--radius-md)',
+        background: 'var(--bg-secondary)',
+        border: '0.5px solid var(--border-default)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+        <span style={{ fontSize: '11px', opacity: 0.5, flexShrink: 0 }}>💭</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {shown}
+        </span>
+      </div>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          style={{
+            alignSelf: 'flex-start',
+            marginLeft: 24,
+            fontSize: '11px',
+            color: 'var(--accent)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          {open ? '收起' : '展开全文'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Tool calls collapsible group ─────────────────────────────────────────────
 
 function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[]; isStreaming?: boolean }) {
@@ -315,22 +361,7 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
 
         {/* ── Think bubble ──────────────────────────────────────────────── */}
         {thinkText && (
-          <div
-            className="animate-fade-in"
-            style={{
-              marginBottom: 14,
-              padding: '9px 13px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-secondary)',
-              border: '0.5px solid var(--border-default)',
-              display: 'flex', alignItems: 'flex-start', gap: 7,
-            }}
-          >
-            <span style={{ fontSize: '11px', opacity: 0.5, flexShrink: 0 }}>💭</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic', lineHeight: 1.5 }}>
-              {thinkText.slice(0, 120)}{thinkText.length > 120 ? '…' : ''}
-            </span>
-          </div>
+          <ThinkBubble text={thinkText} />
         )}
 
         {/* ── Text (agent / conversational) ────────────────────────────── */}

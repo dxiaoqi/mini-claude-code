@@ -13,6 +13,7 @@ import {
 } from '@/lib/export-image'
 import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
+import { splitRedactedThinking, stripThinkingFromContentBlocks } from '@/lib/redacted-thinking'
 
 const BLINO_URL = process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
 
@@ -339,16 +340,20 @@ export default function HomePage() {
           if (!s.inVisual) {
             s.textAccum += chunk
 
+            // Strip reasoning-model wrappers (e.g. redacted_thinking / think) from public stream → 💭 bubble.
+            const { publicText, thinking } = splitRedactedThinking(s.textAccum)
+            setInProgressThinkText(thinking)
+
             // Detect opening <visual type="..."> tag (may arrive across multiple chunks)
-            const visualOpenIdx = s.textAccum.indexOf('<visual')
+            const visualOpenIdx = publicText.indexOf('<visual')
             if (visualOpenIdx !== -1) {
-              const gtIdx = s.textAccum.indexOf('>', visualOpenIdx)
+              const gtIdx = publicText.indexOf('>', visualOpenIdx)
               if (gtIdx !== -1) {
                 // Full opening tag received — commit text before it, start visual
-                const tag = s.textAccum.slice(visualOpenIdx, gtIdx + 1)
+                const tag = publicText.slice(visualOpenIdx, gtIdx + 1)
                 const typeMatch = tag.match(/type\s*=\s*['"]([^'"]+)['"]/)
                 if (typeMatch) {
-                  const beforeText = stripTextTags(s.textAccum.slice(0, visualOpenIdx))
+                  const beforeText = stripTextTags(publicText.slice(0, visualOpenIdx))
                   if (beforeText.trim()) {
                   console.log('[art] commit text before visual, len:', beforeText.length, '| preview:', beforeText.slice(0, 60))
                   s.committed.push({
@@ -359,7 +364,7 @@ export default function HomePage() {
                   })
                   }
                   s.visualType = typeMatch[1]
-                  s.visualAccum = s.textAccum.slice(gtIdx + 1)
+                  s.visualAccum = publicText.slice(gtIdx + 1)
                   s.textAccum = ''
                   s.inVisual = true
                   // Show skeleton for the visual being built
@@ -373,7 +378,7 @@ export default function HomePage() {
               // else: tag incomplete, wait for more chunks
             } else {
               // Pure text — update streaming text block
-              const displayText = stripTextTags(s.textAccum)
+              const displayText = stripTextTags(publicText)
               setInProgressBlocks([
                 ...s.committed,
                 ...(displayText.trim() ? [{
@@ -408,10 +413,13 @@ export default function HomePage() {
             // While accumulating visual, don't update UI (avoid iframe thrashing)
           }
         } else {
-          // Agent mode: append directly to message content
-          setMessages(prev => prev.map(m =>
-            m.id === msgId ? { ...m, content: m.content + chunk, isStreaming: true } : m
-          ))
+          // Agent mode: append; keep <think> / <think> out of main body (💭 bubble).
+          setMessages(prev => prev.map(m => {
+            if (m.id !== msgId) return m
+            const full = m.content + chunk
+            const { publicText, thinking } = splitRedactedThinking(full)
+            return { ...m, content: publicText, thinkText: thinking || undefined, isStreaming: true }
+          }))
         }
         break
       }
@@ -503,7 +511,13 @@ export default function HomePage() {
             textAccumPreview: s.textAccum.slice(0, 120),
           })
 
-          const remainingText = stripTextTags(s.inVisual ? s.visualAccum : s.textAccum)
+          let remainingText = ''
+          if (s.inVisual) {
+            remainingText = stripTextTags(s.visualAccum)
+          } else {
+            const sp = splitRedactedThinking(s.textAccum)
+            remainingText = stripTextTags(sp.publicText)
+          }
           console.log('remainingText (after stripTextTags):', remainingText.slice(0, 120), '| len:', remainingText.length)
 
           if (s.inVisual && remainingText.trim()) {
@@ -533,9 +547,19 @@ export default function HomePage() {
 
             if (msgId && blocksToCommit.length > 0) {
               setMessages(prev => {
-                const updated = prev.map(m =>
-                  m.id === msgId ? { ...m, content: '', isStreaming: false, blocks: blocksToCommit, artifactComplete: true } : m
-                )
+                const { blocks: cleanedBlocks, thinking: thinkFromBlocks } = stripThinkingFromContentBlocks(blocksToCommit)
+                const updated = prev.map(m => {
+                  if (m.id !== msgId) return m
+                  const thinkMerged = [m.thinkText, thinkFromBlocks].filter(Boolean).join('\n\n') || undefined
+                  return {
+                    ...m,
+                    content: '',
+                    isStreaming: false,
+                    blocks: cleanedBlocks,
+                    thinkText: thinkMerged,
+                    artifactComplete: true,
+                  }
+                })
                 const target = updated.find(m => m.id === msgId)
                 console.log('setMessages result for msgId:', msgId, '→ blocks:', target?.blocks?.length, '| content:', target?.content?.slice(0, 60))
                 return updated
@@ -556,15 +580,25 @@ export default function HomePage() {
               const committed = extractEmbeddedVisuals(
                 currentBlocks.map(b => b.kind === 'text' ? { ...b, isStreaming: false } : b)
               )
-              console.log('[done/agent] committing blocks:', committed.length)
-              setMessages(prev => prev.map(m =>
-                m.id === msgId ? { ...m, content: '', isStreaming: false, blocks: committed, artifactComplete: true } : m
-              ))
+              const { blocks: cleaned, thinking: tExtra } = stripThinkingFromContentBlocks(committed)
+              console.log('[done/agent] committing blocks:', cleaned.length)
+              setMessages(prev => prev.map(m => {
+                if (m.id !== msgId) return m
+                const thinkMerged = [m.thinkText, tExtra].filter(Boolean).join('\n\n') || undefined
+                return { ...m, content: '', isStreaming: false, blocks: cleaned, thinkText: thinkMerged, artifactComplete: true }
+              }))
             } else if (msgId) {
               console.log('[done/agent] no inProgressBlocks, marking done')
-              setMessages(prev => prev.map(m =>
-                m.id === msgId ? { ...m, isStreaming: false } : m
-              ))
+              setMessages(prev => prev.map(m => {
+                if (m.id !== msgId) return m
+                const { publicText, thinking } = splitRedactedThinking(m.content)
+                return {
+                  ...m,
+                  content: publicText,
+                  thinkText: [m.thinkText, thinking].filter(Boolean).join('\n\n') || undefined,
+                  isStreaming: false,
+                }
+              }))
             }
             return []
           })
