@@ -90,7 +90,11 @@ program
   .option('--tui', 'Start HTTP server + open browser (same as --serve + auto-open)')
   .option('--port <port>', 'HTTP server port (default: 3001)')
   .option('--host <host>', 'HTTP server host (default: localhost)')
-  .option('--cors-origin <origin>', 'CORS allowed origin for web UI')
+  .option(
+    '--cors-origin <origin>',
+    'CORS: comma-separated list of allowed web UI origins, or * (default: *). ' +
+    'In dev, http://localhost:<port> and http://127.0.0.1:<port> are treated as the same when the port matches.',
+  )
   .option('--config', 'Show current effective configuration')
   .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.blino/projects/<hash>/<sessionId>.trace.jsonl')
   .argument('[prompt]', 'Initial prompt (or pipe via stdin with -p)')

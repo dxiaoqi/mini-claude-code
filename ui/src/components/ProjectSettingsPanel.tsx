@@ -266,7 +266,7 @@ export function ProjectSettingsPanel({
                   <HelpCircle width={12} height={12} /> 本机与跨域
                 </summary>
                 <p style={{ margin: '8px 0 0' }}>
-                  本 UI 在浏览器中访问。若 <code>fetch</code> 指向 <code>localhost:3001</code> 而页面来自 <code>localhost:3000</code>，属于**跨源**；后端需 CORS 允许该 Origin。开发时 Agent 的 <code>--cors-origin</code> 应指向本页源（如 <code>http://localhost:3000</code>）。若用 <code>file://</code> 或 IP 与端口与后端不一致，也会被浏览器拦截。仅 Node/同源脚本调用可不触发 CORS。
+                  本 UI 在浏览器中访问。若 <code>fetch</code> 指向 <code>localhost:3001</code> 而页面来自 <code>localhost:3000</code>，属于**跨源**；后端需 CORS 允许该 Origin。开发时 <code>--cors-origin</code> 应含本页完整源，例如 <code>http://localhost:3000</code>；<code>localhost</code> 与 <code>127.0.0.1</code> 同端口已视为等价的开发主机。若用 <code>file://</code> 或源与配置不一致，会出现 <code>Failed to fetch</code>。仅 Node/同源脚本调用可不触发 CORS。
                 </p>
               </details>
 

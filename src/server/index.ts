@@ -47,6 +47,7 @@ import {
   listProjectSkillRelPaths,
 } from './skillFile.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
+import { resolveCorsAllowOrigin } from './cors.js'
 import type {
   APIClient,
   CanUseToolFn,
@@ -102,12 +103,17 @@ export function createBlinoServer(config: ServerConfig) {
 
   // ── 工具函数 ──
 
-  function cors(res: ServerResponse, origin: string): void {
-    const allowed = config.corsOrigin || '*'
-    res.setHeader('Access-Control-Allow-Origin', allowed)
+  function cors(res: ServerResponse, requestOrigin: string): void {
+    const allow = resolveCorsAllowOrigin(config.corsOrigin, requestOrigin)
+    if (allow) {
+      res.setHeader('Access-Control-Allow-Origin', allow)
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     res.setHeader('Access-Control-Allow-Credentials', 'true')
+    if (requestOrigin) {
+      res.setHeader('Vary', 'Origin')
+    }
   }
 
   function json(res: ServerResponse, data: unknown, status = 200): void {

@@ -57,6 +57,7 @@ coverage/
 # 测试用工作区真密钥
 playground/blino-smoke/.blino/settings.json
 playground/blino-smoke/.blino/settings.local.json
+playground/blino-smoke/.blino/server.json
 
 # ──────────────────────────────────────────────
 #  日志
