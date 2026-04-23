@@ -271,6 +271,26 @@ export interface AgentHandle {
   onComplete: Promise<{ result: string; usage: Usage }>
 }
 
+/** 项目 `.blino/workflow.json` 校验后的内容（由 `loadSettings` 注入） */
+export interface ProjectWorkflowPolicy {
+  schemaVersion: number
+  profile: string
+  phases?: Array<{
+    id: string
+    notes?: string
+    activateSkillPacks?: string[]
+  }>
+  evaluation?: Array<{
+    id: string
+    type: 'script' | 'file_exists'
+    spec: Record<string, unknown>
+  }>
+  team?: {
+    topology?: 'sequential' | 'coordinator'
+    roles?: Array<{ id: string; toolProfile?: string }>
+  }
+}
+
 export interface Settings {
   model?: string
   fallbackModel?: string
@@ -306,6 +326,8 @@ export interface Settings {
    * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
    */
   devTrace?: boolean
+  /** 来自 `<project>/.blino/workflow.json`（若存在且通过校验） */
+  projectPolicy?: ProjectWorkflowPolicy
 }
 
 export interface MCPServerConfig {

@@ -18,6 +18,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Message, ContentBlock, ToolUseBlock } from '../types.js'
 import { handleSilentError } from '../errors/handlers.js'
+import { getBlinoDir } from '../utils/paths.js'
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ function simpleHash(str: string): string {
 function getMemoryPath(projectRoot: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.blino', 'memory', hash, 'memory.json')
+  return resolve(homeDir, getBlinoDir(), 'memory', hash, 'memory.json')
 }
 
 // ─── 元数据提取（从 messages 中自动提取结构化信息）───────────────────────────────

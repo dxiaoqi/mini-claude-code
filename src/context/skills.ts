@@ -6,6 +6,7 @@
  */
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
+import { getBlinoDir } from '../utils/paths.js'
 
 export interface SkillDefinition {
   name: string
@@ -36,13 +37,13 @@ export async function loadSkills(projectRoot: string): Promise<SkillDefinition[]
 
   // User-level skills
   if (homeDir) {
-    const userSkillsDir = resolve(homeDir, '.blino', 'skills')
+    const userSkillsDir = resolve(homeDir, getBlinoDir(), 'skills')
     const userSkills = await loadSkillsFromDir(userSkillsDir, 'user')
     skills.push(...userSkills)
   }
 
   // Project-level skills
-  const projectSkillsDir = resolve(projectRoot, '.blino', 'skills')
+  const projectSkillsDir = resolve(projectRoot, getBlinoDir(), 'skills')
   const projectSkills = await loadSkillsFromDir(projectSkillsDir, 'project')
   skills.push(...projectSkills)
 

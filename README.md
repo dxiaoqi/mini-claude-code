@@ -86,6 +86,10 @@ OPENAI_BASE_URL=https://api.example.com/v1
 | `mcpServers`           | MCP 服务器配置（见下方）                     | `{...}`                      |
 
 
+**项目策略（可选）**：在项目根创建 `.blino/workflow.json`，与 `settings` 一并加载并校验。用于声明 `profile`、阶段 `phases`、轻量 `evaluation` 等（见 `docs/architecture/transformation-roadmap.md`）。字段包含 `schemaVersion`（正整数）。若文件无效，会在控制台警告并忽略策略。
+
+**环境变量**：`BLINO_DIR_NAME` 可覆写数据目录名（默认 `.blino`，一般仅测试使用）。
+
 ---
 
 ## 启动方式

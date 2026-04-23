@@ -25,6 +25,7 @@ import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
 import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
+import { getBlinoDir } from '../utils/paths.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -34,6 +35,7 @@ import type {
   ContextProvider,
   PermissionResponse,
   SessionState,
+  Settings,
   Tool,
 } from '../types.js'
 
@@ -114,7 +116,7 @@ export function createBlinoServer(config: ServerConfig) {
     })
   }
 
-  function getOrCreateSession(sessionId?: string): SessionEntry {
+  async function getOrCreateSession(sessionId?: string): Promise<SessionEntry> {
     if (sessionId && sessions.has(sessionId)) {
       const s = sessions.get(sessionId)!
       s.lastActiveAt = new Date()
@@ -122,9 +124,18 @@ export function createBlinoServer(config: ServerConfig) {
     }
 
     const id = sessionId || uuidv4()
+    const fileSettings = (await loadSettings(config.cwd).catch(() => ({}))) as Settings
+    const model = fileSettings.api?.model || fileSettings.model || config.defaultModel
     const state = createSessionState({
       cwd: config.cwd,
-      settings: { model: config.defaultModel },
+      settings: {
+        ...fileSettings,
+        model,
+        permissionMode: fileSettings.permissionMode || 'default',
+        permissionRules: fileSettings.permissionRules,
+        devTrace: fileSettings.devTrace,
+        logger: fileSettings.logger,
+      },
     })
     const adapter = new HttpServerAdapter()
 
@@ -358,7 +369,7 @@ export function createBlinoServer(config: ServerConfig) {
 
       // 恢复历史 session
       if (body.resumeSessionId) {
-        entry = getOrCreateSession(body.resumeSessionId)
+        entry = await getOrCreateSession(body.resumeSessionId)
         if (entry.state.messages.length === 0) {
           const messages = await loadTranscript(config.cwd, body.resumeSessionId).catch(() => [])
           if (messages.length > 0) {
@@ -367,7 +378,7 @@ export function createBlinoServer(config: ServerConfig) {
           }
         }
       } else {
-        entry = getOrCreateSession(body.sessionId)
+        entry = await getOrCreateSession(body.sessionId)
       }
 
       if (body.model) {
@@ -451,7 +462,7 @@ export function createBlinoServer(config: ServerConfig) {
         return json(res, { error: 'message is required' }, 400)
       }
 
-      const entry = getOrCreateSession(sessionId)
+      const entry = await getOrCreateSession(sessionId)
 
       if (body.model) entry.state.model = body.model
       if (body.bypassPermissions) entry.state.permissionMode = 'bypass'
@@ -518,7 +529,7 @@ export function createBlinoServer(config: ServerConfig) {
 
         const { mkdir: mkdirFn, writeFile: writeFn } = await import('node:fs/promises')
         const { resolve: resolvePath } = await import('node:path')
-        const artifactsDir = resolvePath(config.cwd, '.blino', 'artifacts')
+        const artifactsDir = resolvePath(config.cwd, getBlinoDir(), 'artifacts')
         await mkdirFn(artifactsDir, { recursive: true })
 
         const ext = body.visualType === 'svg' ? 'svg' : 'html'

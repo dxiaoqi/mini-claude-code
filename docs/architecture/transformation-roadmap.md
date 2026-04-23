@@ -46,28 +46,26 @@
 
 ## 二、改造规划（分阶段）
 
-### P0 工程卫生（小改动、高确定性）
+### P0 工程卫生 — **已实现**
 
 | 项 | 内容 |
 |----|------|
-| **路径常量** | 新增 `src/utils/paths.ts`（如 `export const BLINO_DIR = '.blino' as const`），将 `config`、`mcp/config`、`portManager`、`transcript`、`devTrace`、`fileHistory`、`sessionMemory`、`skills`、`toolResultBudget`、`server` 中硬编码 `'.blino'` 改为引用 `BLINO_DIR`（子路径仍用 `resolve` 拼）。 |
-| **.gitignore** | 注释改为 `~/.blino`；忽略项改为 `.blino/settings.local.json`（可保留对 `.mini-claude` 的忽略行 **一行** 作为可选兼容，或完全删除——无用户则建议只保留 `.blino`）。 |
-| **可选环境变量** | 若未来需测试隔离目录，可在 `paths.ts` 内支持 `BLINO_DIR` 环境变量覆写 *根名*（默认 `'.blino'`）；非必须，P0 可只写进规划，代码后置。 |
-
-**验收**：`npx tsc --noEmit`、`npm run test:run` 通过；无行为改变（除 gitignore 实际忽略路径）。
+| **路径常量** | `src/utils/paths.ts`：`getBlinoDir()`（默认 `.blino`，可用 `BLINO_DIR_NAME` 覆写）；`WORKFLOW_FILE`。已替换各模块硬编码。 |
+| **.gitignore** | `.blino/settings.local.json`（见仓库根目录）。 |
 
 ---
 
-### P1 轻量「项目策略」文件（与早期分层设想对齐）
+### P1 轻量「项目策略」文件 — **已实现**
 
 | 项 | 内容 |
 |----|------|
-| **落盘** | `<project>/.blino/workflow.json`（或 `policy.json`，名称在实现时冻结一种）。 |
-| **内容（v1）** | `schemaVersion`、`profile`（如 `default` / `training`）、可选 `phases[]`、`evaluation[]` 中仅声明式字段；**不**嵌入可执行脚本正文。 |
-| **加载** | 与 `loadSettings` 后合并为内存中的 `ResolvedConfig`；未加载或校验失败时 warning，回退为仅 `Settings`。 |
-| **类型** | Zod 或 JSON Schema，版本号随破坏性变更递增。 |
+| **落盘** | `<project>/.blino/workflow.json`（常量 `WORKFLOW_FILE`）。 |
+| **内容（v1）** | `schemaVersion`（正整数）、`profile`、`phases[]`、`evaluation[]`（`type`: `script` \| `file_exists`）、可选 `team`；Zod 校验。 |
+| **合并** | `loadSettings(projectRoot)` 在合并三级 settings 后加载 workflow，成功则 `Settings.projectPolicy = ...`；失败时 `console.warn` 且不回写 policy。 |
+| **HTTP 会话** | `getOrCreateSession` 使用 `loadSettings` 初始化 `SessionState.settings`（含 `projectPolicy`）。 |
+| **CLI** | `createSessionState` 使用展开后的 `fileSettings`（含 `projectPolicy`）。 |
 
-**验收**：能加载并打日志；Agent 主循环至少能读 `profile`（可先 no-op）。
+**单测**：`tests/unit/utils/workflow.test.ts`。
 
 ---
 

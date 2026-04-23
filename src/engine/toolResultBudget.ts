@@ -7,6 +7,7 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Message, ContentBlock, ToolResultBlock } from '../types.js'
+import { getBlinoDir } from '../utils/paths.js'
 
 const DEFAULT_MAX_RESULT_CHARS = 100_000
 const OVERFLOW_PREVIEW_CHARS = 500
@@ -54,7 +55,7 @@ export async function applyToolResultBudget(
       try {
         const overflowDir = resolve(
           process.env.HOME || '/tmp',
-          '.blino', 'overflow', sessionId,
+          getBlinoDir(), 'overflow', sessionId,
         )
         await mkdir(overflowDir, { recursive: true })
 

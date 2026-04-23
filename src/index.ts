@@ -109,5 +109,7 @@ export { findAvailablePort, isPortFree, readServerLock, writeServerLock, clearSe
 export { estimateCost, formatCost, formatTokens } from './utils/cost.js'
 export { createUserMessage, createAssistantMessage, normalizeMessagesForAPI, extractTextContent } from './utils/messages.js'
 export { loadSettings, saveSetting, persistPermissionRules, loadPermissionRules } from './utils/config.js'
+export { getBlinoDir, WORKFLOW_FILE } from './utils/paths.js'
+export { loadWorkflowPolicy, getWorkflowPath, mergeSettingsWithPolicy } from './utils/workflow.js'
 export { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
 export { runPreToolUseHooks, runPostToolUseHooks, runStopHooks } from './utils/hooks.js'

@@ -164,8 +164,13 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   const state = createSessionState({
     cwd,
     settings: {
+      ...fileSettings,
       model,
-      permissionMode: bypassPermissions ? 'bypass' : (isPipe ? 'bypass' : 'default'),
+      permissionMode: bypassPermissions
+        ? 'bypass'
+        : (isPipe
+          ? 'bypass'
+          : (fileSettings.permissionMode || 'default')),
       permissionRules: fileSettings.permissionRules,
       logger,
     },
