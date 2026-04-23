@@ -7,6 +7,7 @@ import { writeFile, mkdir, readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import type { Message, SessionState } from '../types.js'
 import { handleSilentError } from '../errors/handlers.js'
+import { getBlinoDir } from '../utils/paths.js'
 
 /**
  * Get the transcript directory for a project.
@@ -15,7 +16,7 @@ import { handleSilentError } from '../errors/handlers.js'
 function getTranscriptDir(projectRoot: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.blino', 'projects', hash)
+  return resolve(homeDir, getBlinoDir(), 'projects', hash)
 }
 
 function getTranscriptPath(projectRoot: string, sessionId: string): string {

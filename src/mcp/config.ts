@@ -7,6 +7,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { MCPServerConfig } from '../types.js'
+import { getBlinoDir } from '../utils/paths.js'
 
 interface MCPConfigFile {
   mcpServers?: Record<string, MCPServerConfigRaw>
@@ -33,10 +34,11 @@ export async function loadMCPConfigs(
 ): Promise<MCPServerConfig[]> {
   const homeDir = process.env.HOME || process.env.USERPROFILE || ''
 
+  const root = getBlinoDir()
   const configPaths = [
-    homeDir ? resolve(homeDir, '.blino', 'settings.json') : null,
-    resolve(projectRoot, '.blino', 'settings.json'),
-    resolve(projectRoot, '.blino', 'settings.local.json'),
+    homeDir ? resolve(homeDir, root, 'settings.json') : null,
+    resolve(projectRoot, root, 'settings.json'),
+    resolve(projectRoot, root, 'settings.local.json'),
   ].filter(Boolean) as string[]
 
   const merged: Record<string, MCPServerConfigRaw> = {}

@@ -13,28 +13,52 @@
  *   POST /api/sessions/:id/chat              — 发消息（SSE 流式返回）
  *   POST /api/sessions/:id/compact           — 手动压缩
  *   POST /api/permission/:requestId/respond  — 权限弹窗回调
+ *   POST /api/init/skill-creator            — 将内置 skill-creator 写入 .blino/skills/
+ *   GET  /api/workspace                     — 工作区路径与 .blino 根名
+ *   GET  /api/workflow                      — 当前项目 workflow 摘要
+ *   GET  /api/sessions/:id/workflow         — 仅会话 workflow 摘要（无 messages，供轮询）
+ *   POST /api/sessions/:id/workflow/manager  — 设置 workflowManager.mode（写 local settings）
+ *   GET  /api/skills                        — 技能文件列表
+ *   POST /api/sessions/:id/refresh         — 重载磁盘配置并刷新技能缓存
+ *   POST /api/sessions/:id/workflow/phase  — 切换阶段 (delta)
+ *   POST /api/sessions/:id/skill-design    — Skill 设计向导多轮
+ *   POST /api/sessions/:id/skill            — 保存 .md
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { readFile, stat } from 'node:fs/promises'
-import { resolve, extname, join } from 'node:path'
+import { readFile, stat, writeFile, mkdir } from 'node:fs/promises'
+import { resolve, extname, join, dirname } from 'node:path'
 import { v4 as uuidv4 } from 'uuid'
 import { HttpServerAdapter } from '../adapters/http.js'
 import { createSessionState } from '../state/SessionState.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
-import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
+import { loadSettings, getLocalConfigPath, resolveApiConfig, saveSetting } from '../utils/config.js'
+import { getBlinoDir } from '../utils/paths.js'
+import { installSkillCreator } from '../utils/installSkillCreator.js'
+import { loadWorkflowPolicy, getWorkflowPath } from '../utils/workflow.js'
+import { loadSkills } from '../context/skills.js'
+import { invalidateSkillCache } from '../tools/interaction/SkillTool.js'
+import { advanceWorkflowPhase, applyWorkflowRuntimeToState } from '../utils/workflowRuntime.js'
+import { runSkillDesignChat } from './skillDesignChat.js'
+import {
+  writeProjectSkill,
+  extractBlinoSkillBlock,
+  reloadSettingsIntoSession,
+  listProjectSkillRelPaths,
+} from './skillFile.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
-import { writeFile, mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { resolveCorsAllowOrigin } from './cors.js'
 import type {
   APIClient,
   CanUseToolFn,
   ContextProvider,
   PermissionResponse,
   SessionState,
+  Settings,
   Tool,
+  WorkflowManagerMode,
 } from '../types.js'
 
 interface SessionEntry {
@@ -82,12 +106,17 @@ export function createBlinoServer(config: ServerConfig) {
 
   // ── 工具函数 ──
 
-  function cors(res: ServerResponse, origin: string): void {
-    const allowed = config.corsOrigin || '*'
-    res.setHeader('Access-Control-Allow-Origin', allowed)
+  function cors(res: ServerResponse, requestOrigin: string): void {
+    const allow = resolveCorsAllowOrigin(config.corsOrigin, requestOrigin)
+    if (allow) {
+      res.setHeader('Access-Control-Allow-Origin', allow)
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     res.setHeader('Access-Control-Allow-Credentials', 'true')
+    if (requestOrigin) {
+      res.setHeader('Vary', 'Origin')
+    }
   }
 
   function json(res: ServerResponse, data: unknown, status = 200): void {
@@ -114,7 +143,7 @@ export function createBlinoServer(config: ServerConfig) {
     })
   }
 
-  function getOrCreateSession(sessionId?: string): SessionEntry {
+  async function getOrCreateSession(sessionId?: string): Promise<SessionEntry> {
     if (sessionId && sessions.has(sessionId)) {
       const s = sessions.get(sessionId)!
       s.lastActiveAt = new Date()
@@ -122,9 +151,18 @@ export function createBlinoServer(config: ServerConfig) {
     }
 
     const id = sessionId || uuidv4()
+    const fileSettings = (await loadSettings(config.cwd).catch(() => ({}))) as Settings
+    const model = fileSettings.api?.model || fileSettings.model || config.defaultModel
     const state = createSessionState({
       cwd: config.cwd,
-      settings: { model: config.defaultModel },
+      settings: {
+        ...fileSettings,
+        model,
+        permissionMode: fileSettings.permissionMode || 'default',
+        permissionRules: fileSettings.permissionRules,
+        devTrace: fileSettings.devTrace,
+        logger: fileSettings.logger,
+      },
     })
     const adapter = new HttpServerAdapter()
 
@@ -223,6 +261,23 @@ export function createBlinoServer(config: ServerConfig) {
         json(res, basePayload)
       } catch {
         json(res, {})
+      }
+      return
+    }
+
+    // ── POST /api/init/skill-creator  (install built-in skill-creator for Web UI) ──
+    if (method === 'POST' && path === '/api/init/skill-creator') {
+      try {
+        const body = (await readBody(req)) as { force?: boolean }
+        const r = await installSkillCreator(config.cwd, { force: body?.force === true })
+        json(res, {
+          ok: r.ok,
+          path: r.path,
+          created: r.created,
+          message: r.message,
+        }, r.ok ? 200 : 500)
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 500)
       }
       return
     }
@@ -345,6 +400,71 @@ export function createBlinoServer(config: ServerConfig) {
       return
     }
 
+    if (method === 'GET' && path === '/api/workspace') {
+      try {
+        const wf = await getWorkflowPath(config.cwd)
+        json(res, {
+          cwd: config.cwd,
+          blinoDir: getBlinoDir(),
+          workflowPath: wf,
+        })
+      } catch (e) {
+        json(res, { error: (e as Error).message }, 500)
+      }
+      return
+    }
+
+    if (method === 'GET' && path === '/api/workflow') {
+      try {
+        const { policy, error: wfErr } = await loadWorkflowPolicy(config.cwd)
+        const fileS = (await loadSettings(config.cwd).catch(() => ({}))) as Settings
+        json(res, {
+          ok: !wfErr,
+          path: getWorkflowPath(config.cwd),
+          error: wfErr,
+          policy: policy || null,
+          workflowManager: fileS.workflowManager ?? { mode: 'manual' },
+        })
+      } catch (e) {
+        json(res, { error: (e as Error).message }, 500)
+      }
+      return
+    }
+
+    // ── POST /api/workflow/manager  { mode } — 写 .blino/settings.local.json，无需 session（仅本机/loopback）──
+    if (method === 'POST' && path === '/api/workflow/manager') {
+      if (!isLoopbackRemote(req) && browserSentOrigin(req)) {
+        return json(res, { error: 'Forbidden' }, 403)
+      }
+      const body = (await readBody(req)) as { mode?: string }
+      const m = (body?.mode || '').trim() as WorkflowManagerMode
+      if (m !== 'manual' && m !== 'advisory' && m !== 'auto') {
+        return json(res, { error: 'mode must be manual, advisory, or auto' }, 400)
+      }
+      try {
+        await saveSetting('local', config.cwd, 'workflowManager', { mode: m })
+        for (const e of sessions.values()) {
+          e.state.settings = { ...e.state.settings, workflowManager: { mode: m } }
+          e.state.systemPromptSectionCache.clear()
+        }
+        json(res, { ok: true, workflowManager: { mode: m } })
+      } catch (err) {
+        json(res, { ok: false, error: (err as Error).message }, 500)
+      }
+      return
+    }
+
+    if (method === 'GET' && path === '/api/skills') {
+      try {
+        const files = await listProjectSkillRelPaths(config.cwd)
+        const skills = await loadSkills(config.cwd, { includeUser: true })
+        json(res, { files, count: files.length, names: skills.map(s => s.name) })
+      } catch (e) {
+        json(res, { error: (e as Error).message, files: [] }, 500)
+      }
+      return
+    }
+
     // ── POST /api/sessions ──
     if (method === 'POST' && path === '/api/sessions') {
       const body = await readBody(req) as {
@@ -358,7 +478,7 @@ export function createBlinoServer(config: ServerConfig) {
 
       // 恢复历史 session
       if (body.resumeSessionId) {
-        entry = getOrCreateSession(body.resumeSessionId)
+        entry = await getOrCreateSession(body.resumeSessionId)
         if (entry.state.messages.length === 0) {
           const messages = await loadTranscript(config.cwd, body.resumeSessionId).catch(() => [])
           if (messages.length > 0) {
@@ -367,7 +487,7 @@ export function createBlinoServer(config: ServerConfig) {
           }
         }
       } else {
-        entry = getOrCreateSession(body.sessionId)
+        entry = await getOrCreateSession(body.sessionId)
       }
 
       if (body.model) {
@@ -392,12 +512,160 @@ export function createBlinoServer(config: ServerConfig) {
       return
     }
 
+    // ── POST /api/sessions/:id/refresh  (reload .blino from disk) ──
+    const refreshMatch = path.match(/^\/api\/sessions\/([^/]+)\/refresh$/)
+    if (method === 'POST' && refreshMatch) {
+      const entry = sessions.get(refreshMatch[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      try {
+        invalidateSkillCache(entry.id)
+        await reloadSettingsIntoSession(entry.state)
+        const names = (await loadSkills(config.cwd, {
+          includeUser: true,
+          activateSkillPacks: entry.state.activeSkillPacks,
+        })).map(s => s.name)
+        json(res, {
+          ok: true,
+          activePhaseId: entry.state.activePhaseId,
+          activePhaseIndex: entry.state.activePhaseIndex,
+          activeSkillPacks: entry.state.activeSkillPacks,
+          skillNames: names,
+        })
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 500)
+      }
+      return
+    }
+
+    // ── POST /api/sessions/:id/workflow/phase  { delta: 1 | -1 } ──
+    const phaseMatch = path.match(/^\/api\/sessions\/([^/]+)\/workflow\/phase$/)
+    if (method === 'POST' && phaseMatch) {
+      const entry = sessions.get(phaseMatch[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const body = (await readBody(req)) as { delta?: number }
+      const d = body?.delta === -1 ? -1 : 1
+      const r = advanceWorkflowPhase(entry.state, d)
+      invalidateSkillCache(entry.id)
+      entry.state.systemPromptSectionCache.clear()
+      const names = (await loadSkills(config.cwd, {
+        includeUser: !entry.state.activeSkillPacks?.length,
+        activateSkillPacks: entry.state.activeSkillPacks,
+      })).map(s => s.name)
+      json(res, { ...r, activePhaseId: entry.state.activePhaseId, activePhaseIndex: entry.state.activePhaseIndex, activeSkillPacks: entry.state.activeSkillPacks, skillNames: names })
+      return
+    }
+
+    // ── POST /api/sessions/:id/skill-design  { messages: {role, content}[] } ──
+    const designMatch = path.match(/^\/api\/sessions\/([^/]+)\/skill-design$/)
+    if (method === 'POST' && designMatch) {
+      const entry = sessions.get(designMatch[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const body = (await readBody(req)) as { messages: Array<{ role: 'user' | 'assistant'; content: string }> }
+      if (!Array.isArray(body?.messages) || body.messages.length === 0) {
+        return json(res, { error: 'messages required' }, 400)
+      }
+      const { text, error: er } = await runSkillDesignChat(config.cwd, body.messages)
+      if (er) return json(res, { error: er }, 500)
+      const proposed = extractBlinoSkillBlock(text) || undefined
+      json(res, { text, proposedFile: proposed })
+      return
+    }
+
+    // ── POST /api/sessions/:id/skill  { fileName, content, sessionId? } ──
+    const skillWriteMatch = path.match(/^\/api\/sessions\/([^/]+)\/skill$/)
+    if (method === 'POST' && skillWriteMatch) {
+      const entry = sessions.get(skillWriteMatch[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const body = (await readBody(req)) as { fileName: string; content: string }
+      if (!body?.fileName || typeof body.content !== 'string') {
+        return json(res, { error: 'fileName and content required' }, 400)
+      }
+      try {
+        const w = await writeProjectSkill(config.cwd, body.fileName, body.content, { sessionId: entry.id })
+        await reloadSettingsIntoSession(entry.state)
+        invalidateSkillCache(entry.id)
+        json(res, { ok: true, path: w.path })
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 400)
+      }
+      return
+    }
+
+    // ── GET /api/sessions/:id/workflow  — 轻量，无 messages（UI 轮询用）──
+    const sessionWorkflowGet = path.match(/^\/api\/sessions\/([^/]+)\/workflow$/)
+    if (method === 'GET' && sessionWorkflowGet) {
+      const entry = sessions.get(sessionWorkflowGet[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const policy = entry.state.settings.projectPolicy
+      const phaseCount = policy?.phases?.length || 0
+      const phases = policy?.phases?.map(p => ({
+        id: p.id,
+        notes: p.notes,
+        activateSkillPacks: p.activateSkillPacks,
+      })) ?? []
+      const wm = entry.state.settings.workflowManager
+      json(res, {
+        workflow: {
+          activePhaseId: entry.state.activePhaseId,
+          activePhaseIndex: entry.state.activePhaseIndex,
+          activeSkillPacks: entry.state.activeSkillPacks,
+          phaseCount,
+          profile: policy?.profile,
+          mermaid: policy?.mermaid,
+          phases,
+          workflowManager: wm?.mode
+            ? { mode: wm.mode }
+            : { mode: 'manual' as WorkflowManagerMode },
+        },
+      })
+      return
+    }
+
+    // ── POST /api/sessions/:id/workflow/manager  { mode: "manual" | "advisory" | "auto" } ──
+    const sessionWfManager = path.match(/^\/api\/sessions\/([^/]+)\/workflow\/manager$/)
+    if (method === 'POST' && sessionWfManager) {
+      if (!isLoopbackRemote(req) && browserSentOrigin(req)) {
+        return json(res, { error: 'Forbidden' }, 403)
+      }
+      const entry = sessions.get(sessionWfManager[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const body = (await readBody(req)) as { mode?: string }
+      const m = (body?.mode || '').trim() as WorkflowManagerMode
+      if (m !== 'manual' && m !== 'advisory' && m !== 'auto') {
+        return json(res, { error: 'mode must be manual, advisory, or auto' }, 400)
+      }
+      try {
+        await saveSetting('local', config.cwd, 'workflowManager', { mode: m })
+        entry.state.settings = {
+          ...entry.state.settings,
+          workflowManager: { mode: m },
+        }
+        entry.state.systemPromptSectionCache.clear()
+        json(res, { ok: true, workflowManager: { mode: m } })
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 500)
+      }
+      return
+    }
+
     // ── GET /api/sessions/:id ──
     const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/)
     if (method === 'GET' && sessionMatch) {
       const entry = sessions.get(sessionMatch[1])
       if (!entry) return json(res, { error: 'Session not found' }, 404)
-      json(res, { session: sessionToInfo(entry), messages: entry.state.messages })
+      const policy = entry.state.settings.projectPolicy
+      const phaseCount = policy?.phases?.length || 0
+      json(res, {
+        session: sessionToInfo(entry),
+        messages: entry.state.messages,
+        workflow: {
+          activePhaseId: entry.state.activePhaseId,
+          activePhaseIndex: entry.state.activePhaseIndex,
+          activeSkillPacks: entry.state.activeSkillPacks,
+          phaseCount,
+          profile: policy?.profile,
+        },
+      })
       return
     }
 
@@ -451,7 +719,7 @@ export function createBlinoServer(config: ServerConfig) {
         return json(res, { error: 'message is required' }, 400)
       }
 
-      const entry = getOrCreateSession(sessionId)
+      const entry = await getOrCreateSession(sessionId)
 
       if (body.model) entry.state.model = body.model
       if (body.bypassPermissions) entry.state.permissionMode = 'bypass'
@@ -518,7 +786,7 @@ export function createBlinoServer(config: ServerConfig) {
 
         const { mkdir: mkdirFn, writeFile: writeFn } = await import('node:fs/promises')
         const { resolve: resolvePath } = await import('node:path')
-        const artifactsDir = resolvePath(config.cwd, '.blino', 'artifacts')
+        const artifactsDir = resolvePath(config.cwd, getBlinoDir(), 'artifacts')
         await mkdirFn(artifactsDir, { recursive: true })
 
         const ext = body.visualType === 'svg' ? 'svg' : 'html'

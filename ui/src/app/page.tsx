@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings } from 'lucide-react'
+import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings, FolderCode } from 'lucide-react'
 import { MessageItem, type ChatMessage, type InProgressArtifact, type ToolCallItem } from '@/components/MessageItem'
 import { type WidgetState } from '@/components/WidgetRenderer'
 import { type PlanPhase } from '@/components/PlanProgress'
@@ -15,10 +15,32 @@ import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
 import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
+import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
 
 const BLINO_URL = process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
+
+/** Browser fetch failed (wrong URL, server down, CORS, etc.) — not a Skill-tool bug. */
+function formatAgentStreamError(err: unknown, requestUrl: string): string {
+  const raw = (err instanceof Error ? err.message : String(err)) || 'unknown'
+  if (
+    raw === 'Failed to fetch' ||
+    /NetworkError|network error|load failed|Failed to load resource/i.test(raw) ||
+    (err instanceof TypeError && /fetch|network/i.test(raw))
+  ) {
+    return [
+      '无法连到 Blino 后端（与 Skill 内容无关，多为服务未开、地址/端口写错、或 CORS/跨域与页面源不一致）',
+      `请求: ${requestUrl}`,
+      `当前 NEXT_PUBLIC_BLINO_URL: ${BLINO_URL}`,
+      '可检查：1) 已在项目根运行 blino --serve / --tui 且端口一致；2) 浏览器打开页面的主机名与 --cors-origin 是否同一套（localhost vs 127.0.0.1）；3) 远程部署时设 BLINO_PUBLIC_API_URL 与 CORS。原始错误: ' + raw,
+    ].join('\n')
+  }
+  if (raw.startsWith('HTTP ')) {
+    return `Blino 返回 ${raw}（请求 ${requestUrl}）`
+  }
+  return `连接失败: ${raw}`
+}
 
 interface StreamMeta { conversationId?: string; artifactId?: string; turnId?: string; sessionId?: string }
 
@@ -202,6 +224,7 @@ export default function HomePage() {
   /** Server session id for current mode — drives SessionMenu highlight */
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [projectOpen, setProjectOpen] = useState(false)
 
   // Refs
   const messagesRootRef = useRef<HTMLDivElement>(null)
@@ -914,15 +937,24 @@ export default function HomePage() {
   // ─── Submit ────────────────────────────────────────────────────────────────
 
   const streamSSE = useCallback(async (url: string, body: Record<string, unknown>, signal: AbortSignal) => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      })
+    } catch (e) {
+      throw new Error(formatAgentStreamError(e, url))
+    }
+    if (!response.ok) {
+      const detail = response.statusText ? ` ${response.statusText}` : ''
+      throw new Error(`Blino 返回 HTTP ${response.status}${detail}（${url}）`)
+    }
+    if (!response.body) throw new Error(`无响应体（${url}）`)
 
-    const reader = response.body!.getReader()
+    const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
 
@@ -1008,7 +1040,10 @@ export default function HomePage() {
     } catch (err: unknown) {
       if ((err as Error)?.name !== 'AbortError') {
         const msgId = currentAssistantMsgIdRef.current
-        if (msgId) updateMessage(msgId, { content: `连接失败: ${(err as Error)?.message}`, isStreaming: false })
+        if (msgId) {
+          const text = err instanceof Error ? err.message : String(err)
+          updateMessage(msgId, { content: text, isStreaming: false })
+        }
       }
       resetInProgress()
     } finally {
@@ -1099,6 +1134,12 @@ export default function HomePage() {
             activeSessionId={activeSessionId}
             onNewSession={startNewSession}
             onSwitchSession={switchToSession}
+          />
+          <HeaderBtn
+            label="项目"
+            icon={<FolderCode width={12} height={12} />}
+            onClick={() => setProjectOpen(true)}
+            square={false}
           />
           <HeaderBtn
             label="设置"
@@ -1238,6 +1279,12 @@ export default function HomePage() {
         />
       )}
 
+      <ProjectSettingsPanel
+        blinoUrl={BLINO_URL}
+        open={projectOpen}
+        onClose={() => setProjectOpen(false)}
+        activeSessionId={activeSessionId}
+      />
       <ApiSettingsPanel
         blinoUrl={BLINO_URL}
         open={settingsOpen}

@@ -26,20 +26,22 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import type { PermissionRule, Settings } from '../types.js'
+import { getBlinoDir } from './paths.js'
+import { getWorkflowPath, loadWorkflowPolicy, mergeSettingsWithPolicy } from './workflow.js'
 
 // ── 路径 ──
 
 export function getUserConfigPath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(home, '.blino', 'settings.json')
+  return resolve(home, getBlinoDir(), 'settings.json')
 }
 
 export function getProjectConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.blino', 'settings.json')
+  return resolve(projectRoot, getBlinoDir(), 'settings.json')
 }
 
 export function getLocalConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.blino', 'settings.local.json')
+  return resolve(projectRoot, getBlinoDir(), 'settings.local.json')
 }
 
 // ── API Key 配置结构 ──
@@ -88,7 +90,12 @@ export async function loadSettings(projectRoot: string): Promise<Settings> {
     }
   }
 
-  return merged as unknown as Settings
+  const base = merged as unknown as Settings
+  const { policy, error } = await loadWorkflowPolicy(projectRoot)
+  if (error) {
+    console.warn(`[blino] ${getWorkflowPath(projectRoot)}: ${error}`)
+  }
+  return mergeSettingsWithPolicy(base, policy)
 }
 
 /**

@@ -86,6 +86,10 @@ OPENAI_BASE_URL=https://api.example.com/v1
 | `mcpServers`           | MCP 服务器配置（见下方）                     | `{...}`                      |
 
 
+**项目策略（可选）**：在项目根创建 `.blino/workflow.json`，与 `settings` 一并加载并校验。用于声明 `profile`、多阶段 `phases`（每阶段可写 `activateSkillPacks` 限定只从 `.blino/skills/<pack名>/` 下加载 Skill）、轻量 `evaluation` 等（见 `docs/architecture/transformation-roadmap.md`）。字段包含 `schemaVersion`（正整数）。若文件无效，会在控制台警告并忽略策略。终端下可用 `/phase` / `/phase next` / `/phase prev` 在阶段间切换（会刷新可见 Skill 列表）。
+
+**环境变量**：`BLINO_DIR_NAME` 可覆写数据目录名（默认 `.blino`，一般仅测试使用）。
+
 ---
 
 ## 启动方式
@@ -295,6 +299,19 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 ---
 
 ## Skill 系统
+
+在 `.blino/skills/` 下创建 Markdown 文件来定义可复用的工作流。
+
+**脚手架「Skill Creator」**（内置）：
+
+- 在项目根执行 **`blino init`**，会在 **`.blino/skills/skill-creator.md`** 落盘内置模板（已存在则跳过，加 **`--force`** 覆盖）。  
+- 使用 **Web UI** 时，打开 **设置** → **安装 skill-creator**（与上面等价）。  
+
+然后在对话中执行 **Skill `skill-creator`**，让模型按引导创建或扩展 **`.blino/workflow.json`** 与各 **`.blino/skills/<pack>/`**。模板会优先用**多轮小问或一页填空**收需求，不假设你会写专业 PRD；可直接复制该模板末尾的**体验用提示词**。模板见 `templates/blino-skills/skill-creator.md`（亦随 npm 包发布）。
+
+**Web UI**：顶栏 **「项目」** 侧栏可查看工作区路径、workflow 阶段（轻量左右箭头切换）、`.blino/skills` 文件列表、**重载与刷新**、安装 skill-creator，以及 **创建 Skill** 多轮向导（需已建立对话会话）。**`--tui`** 会自动生成与 UI 同端口匹配的 CORS 允许列表（含 `localhost` / `127.0.0.1` 成对、以及 `0.0.0.0` 时的局域网 IP）。部署到公网或反代时，在服务器上把 **`BLINO_PUBLIC_API_URL`** 设为浏览器可访问的 API 地址（如 `https://api.example.com`），必要时用 **`--cors-origin`** 或 **`BLINO_CORS_EXTRA`** 追加前端的 `Origin`。**`--serve`** 仍建议显式传 `--cors-origin` 或 `CORS_ORIGIN`，除非你知道默认行为。
+
+### 手写 skill 示例
 
 在 `.blino/skills/` 下创建 Markdown 文件来定义可复用的工作流：
 

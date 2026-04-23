@@ -51,9 +51,13 @@ tests/eval/reports/
 coverage/
 
 # ──────────────────────────────────────────────
-#  运行时数据（~/.mini-claude 风格，但如果在项目内）
+#  运行时数据（~/.blino 风格，但如果在项目内）
 # ──────────────────────────────────────────────
-.mini-claude/settings.local.json
+.blino/settings.local.json
+# 测试用工作区真密钥
+playground/blino-smoke/.blino/settings.json
+playground/blino-smoke/.blino/settings.local.json
+playground/blino-smoke/.blino/server.json
 
 # ──────────────────────────────────────────────
 #  日志

@@ -1,0 +1,8 @@
+{
+  "api": {
+    "provider": "openai",
+    "openaiApiKey": "PASTE_YOUR_KEY",
+    "openaiBaseUrl": "https://api.openai.com/v1",
+    "model": "gpt-4o"
+  }
+}

@@ -20,6 +20,7 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import { handleSilentError } from '../errors/handlers.js'
+import { getBlinoDir } from '../utils/paths.js'
 
 // ─── 事件类型 ──────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ function simpleHash(str: string): string {
 function getDevTracePath(projectRoot: string, sessionId: string): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.blino', 'projects', hash, `${sessionId}.trace.jsonl`)
+  return resolve(homeDir, getBlinoDir(), 'projects', hash, `${sessionId}.trace.jsonl`)
 }
 
 // ─── 记录器 ────────────────────────────────────────────────────────────────────

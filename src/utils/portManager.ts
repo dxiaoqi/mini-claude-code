@@ -11,6 +11,7 @@
 import { createServer } from 'node:net'
 import { writeFile, readFile, mkdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { getBlinoDir } from './paths.js'
 
 export interface ServerLockInfo {
   pid: number
@@ -61,7 +62,7 @@ export async function findAvailablePort(
 // ── Workspace 锁文件 ─────────────────────────────────────────────────────────
 
 function getLockFilePath(cwd: string): string {
-  return resolve(cwd, '.blino', LOCK_FILE_NAME)
+  return resolve(cwd, getBlinoDir(), LOCK_FILE_NAME)
 }
 
 /**
@@ -81,7 +82,7 @@ export async function writeServerLock(
     startedAt: new Date().toISOString(),
   }
   const path = getLockFilePath(cwd)
-  await mkdir(resolve(cwd, '.blino'), { recursive: true })
+  await mkdir(resolve(cwd, getBlinoDir()), { recursive: true })
   await writeFile(path, JSON.stringify(info, null, 2) + '\n', 'utf-8')
 }
 

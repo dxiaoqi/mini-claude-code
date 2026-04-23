@@ -123,6 +123,9 @@ export interface ToolResultBlockParam {
   is_error?: boolean
 }
 
+/** 工作流调度：由谁决定阶段切换（写入 session 的 active phase / skill packs） */
+export type WorkflowManagerMode = 'manual' | 'advisory' | 'auto'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Tool<Input = any, Output = any> {
   name: string
@@ -151,6 +154,12 @@ export interface Tool<Input = any, Output = any> {
 
   readonly shouldDefer?: boolean
   readonly alwaysLoad?: boolean
+
+  /**
+   * When set, tools can be registered but omitted from the API tool list / static tool instructions.
+   * Used for session-dependent tools (e.g. workflow phase control in manual mode).
+   */
+  shouldIncludeInApi?(ctx: { state: SessionState }): boolean
 
   isEnabled?(): boolean
   maxResultSizeChars?: number
@@ -271,6 +280,28 @@ export interface AgentHandle {
   onComplete: Promise<{ result: string; usage: Usage }>
 }
 
+/** 项目 `.blino/workflow.json` 校验后的内容（由 `loadSettings` 注入） */
+export interface ProjectWorkflowPolicy {
+  schemaVersion: number
+  profile: string
+  /** Optional Mermaid source for workflow visualization in the Web UI */
+  mermaid?: string
+  phases?: Array<{
+    id: string
+    notes?: string
+    activateSkillPacks?: string[]
+  }>
+  evaluation?: Array<{
+    id: string
+    type: 'script' | 'file_exists'
+    spec: Record<string, unknown>
+  }>
+  team?: {
+    topology?: 'sequential' | 'coordinator'
+    roles?: Array<{ id: string; toolProfile?: string }>
+  }
+}
+
 export interface Settings {
   model?: string
   fallbackModel?: string
@@ -293,6 +324,11 @@ export interface Settings {
     model?: string
     fallbackModel?: string
   }
+  /**
+   * 工作流阶段由谁 driving：`manual` 仅用户/UI/CLI 切换；`advisory` | `auto` 时主 Agent 可调用 WorkflowPhase 工具改阶段。
+   * `auto` 与 `advisory` 在实现上相同，仅在系统提示中强调自动推进的责任不同。
+   */
+  workflowManager?: { mode?: WorkflowManagerMode }
   /** Logger instance for structured logging */
   logger?: unknown
   /**
@@ -306,6 +342,8 @@ export interface Settings {
    * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
    */
   devTrace?: boolean
+  /** 来自 `<project>/.blino/workflow.json`（若存在且通过校验） */
+  projectPolicy?: ProjectWorkflowPolicy
 }
 
 export interface MCPServerConfig {
@@ -351,6 +389,19 @@ export interface SessionState {
   model: string
   fallbackModel?: string
   settings: Settings
+
+  /**
+   * 来自 `projectPolicy.phases`：当前阶段下标（由 workflowRuntime 维护）。
+   * 无 workflow 或无双阶段时可视为 0。
+   */
+  activePhaseIndex?: number
+  /** 当前阶段 id（与 `phases[activePhaseIndex].id` 一致） */
+  activePhaseId?: string
+  /**
+   * 当阶段配置了 `activateSkillPacks` 时，为当前要加载的 pack 名列表（相对 `skills/<pack>`）。
+   * 空或未设置表示不限制根目录下全部 .md + 子目录；非空时仅这些包下技能可见。
+   */
+  activeSkillPacks?: string[]
 }
 
 // ────────────────────────────────────────────

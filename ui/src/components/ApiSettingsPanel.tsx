@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { X } from 'lucide-react'
+import { SkillCreatorInstallOrView } from '@/components/SkillCreatorInstallOrView'
 
 export interface ApiConfigResponse {
   model: string
@@ -57,7 +58,6 @@ export function ApiSettingsPanel({ blinoUrl, open, onClose }: Props) {
   const [openaiKey, setOpenaiKey] = useState('')
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false)
   const [hasOpenaiKey, setHasOpenaiKey] = useState(false)
-
   const load = useCallback(async () => {
     setLoading(true)
     setMessage(null)
@@ -269,6 +269,19 @@ export function ApiSettingsPanel({ blinoUrl, open, onClose }: Props) {
                   }
                   style={inputStyle}
                   autoComplete="off"
+                />
+              </div>
+
+              <div style={{ marginBottom: 18, paddingTop: 6, borderTop: '0.5px solid var(--border-default)' }}>
+                <span style={labelStyle}>工作流 / Skill</span>
+                <p style={{ margin: '0 0 10px', fontSize: '12px', lineHeight: 1.5, color: 'var(--text-tertiary)' }}>
+                  将内置的 <code style={{ fontSize: '11px' }}>skill-creator</code> 写入项目{' '}
+                  <code style={{ fontSize: '11px' }}>.blino/skills/</code>，用于脚手架 workflow 与各阶段 skill 包。
+                </p>
+                <SkillCreatorInstallOrView
+                  blinoUrl={blinoUrl}
+                  panelOpen={open}
+                  onMessage={setMessage}
                 />
               </div>
 
