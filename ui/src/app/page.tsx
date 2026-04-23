@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings } from 'lucide-react'
+import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings, FolderCode } from 'lucide-react'
 import { MessageItem, type ChatMessage, type InProgressArtifact, type ToolCallItem } from '@/components/MessageItem'
 import { type WidgetState } from '@/components/WidgetRenderer'
 import { type PlanPhase } from '@/components/PlanProgress'
@@ -15,6 +15,7 @@ import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
 import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
+import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
 
@@ -202,6 +203,7 @@ export default function HomePage() {
   /** Server session id for current mode — drives SessionMenu highlight */
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [projectOpen, setProjectOpen] = useState(false)
 
   // Refs
   const messagesRootRef = useRef<HTMLDivElement>(null)
@@ -1101,6 +1103,12 @@ export default function HomePage() {
             onSwitchSession={switchToSession}
           />
           <HeaderBtn
+            label="项目"
+            icon={<FolderCode width={12} height={12} />}
+            onClick={() => setProjectOpen(true)}
+            square={false}
+          />
+          <HeaderBtn
             label="设置"
             icon={<Settings width={12} height={12} />}
             onClick={() => setSettingsOpen(true)}
@@ -1238,6 +1246,12 @@ export default function HomePage() {
         />
       )}
 
+      <ProjectSettingsPanel
+        blinoUrl={BLINO_URL}
+        open={projectOpen}
+        onClose={() => setProjectOpen(false)}
+        activeSessionId={activeSessionId}
+      />
       <ApiSettingsPanel
         blinoUrl={BLINO_URL}
         open={settingsOpen}

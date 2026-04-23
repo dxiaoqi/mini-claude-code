@@ -309,6 +309,8 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 然后在对话中执行 **Skill `skill-creator`**，让模型按引导创建或扩展 **`.blino/workflow.json`** 与各 **`.blino/skills/<pack>/`**。模板见 `templates/blino-skills/skill-creator.md`（亦随 npm 包发布）。
 
+**Web UI**：顶栏 **「项目」** 侧栏可查看工作区路径、workflow 阶段（轻量左右箭头切换）、`.blino/skills` 文件列表、**重载与刷新**、安装 skill-creator，以及 **创建 Skill** 多轮向导（需已建立对话会话）。同机开发时请将 `blino --serve` / `--tui` 的 CORS 指向页面源（如 `http://localhost:3000`），否则浏览器会拦截跨域请求。
+
 ### 手写 skill 示例
 
 在 `.blino/skills/` 下创建 Markdown 文件来定义可复用的工作流：

@@ -105,7 +105,9 @@
 2. **P2**：已合入（本段）。  
 3. **P3**：按产品优先级排期。
 
-**内置 skill-creator**：`blino init`、HTTP `POST /api/init/skill-creator`、Web 设置中「安装 skill-creator」— 将模板写入 `.<blino>/skills/skill-creator.md`（`src/utils/installSkillCreator.ts`）。
+**内置 skill-creator**：`blino init`、HTTP `POST /api/init/skill-creator`、Web **项目**侧栏 — 将模板写入 `.<blino>/skills/skill-creator.md`（`src/utils/installSkillCreator.ts`）。
+
+**Web 项目侧栏（轻量）**：`GET /api/workspace`、`GET /api/workflow`、`GET /api/skills`；`POST /api/sessions/:id/refresh`；`POST /api/sessions/:id/workflow/phase`；`POST /api/sessions/:id/skill-design`（无工具 LLM）；`POST /api/sessions/:id/skill` 保存 `.md`。
 
 ---
 
