@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
-import { X, ChevronLeft, ChevronRight, RefreshCw, Sparkles, HelpCircle, FolderCode } from 'lucide-react'
+import { X, RefreshCw, Sparkles, HelpCircle, FolderCode } from 'lucide-react'
 import { SkillCreatorInstallOrView } from '@/components/SkillCreatorInstallOrView'
+import { ProjectWorkflowSection } from '@/components/ProjectWorkflowSection'
 
 const labelStyle: CSSProperties = {
   display: 'block',
@@ -13,8 +14,6 @@ const labelStyle: CSSProperties = {
   marginBottom: 6,
   textTransform: 'uppercase',
 }
-
-type WorkflowRes = { ok?: boolean; path?: string; error?: string; policy: unknown }
 
 export function ProjectSettingsPanel({
   blinoUrl,
@@ -31,16 +30,8 @@ export function ProjectSettingsPanel({
   const [blinoDir, setBlinoDir] = useState<string>('.blino')
   const [skillFiles, setSkillFiles] = useState<string[]>([])
   const [skillNames, setSkillNames] = useState<string[]>([])
-  const [workflow, setWorkflow] = useState<WorkflowRes | null>(null)
-  const [wfInSession, setWfInSession] = useState<{
-    activePhaseId?: string
-    activePhaseIndex?: number
-    phaseCount?: number
-    profile?: string
-  } | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [phaseBusy, setPhaseBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [designHistory, setDesignHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [designInput, setDesignInput] = useState('')
@@ -52,32 +43,21 @@ export function ProjectSettingsPanel({
     setLoading(true)
     setMessage(null)
     try {
-      const [w, s, sk] = await Promise.all([
+      const [w, sk] = await Promise.all([
         fetch(`${blinoUrl}/api/workspace`).then(r => r.json()) as Promise<{ cwd?: string; blinoDir?: string }>,
-        fetch(`${blinoUrl}/api/workflow`).then(r => r.json()) as Promise<WorkflowRes>,
         fetch(`${blinoUrl}/api/skills`).then(r => r.json()) as Promise<{ files?: string[]; names?: string[]; error?: string }>,
       ])
       setCwd(w.cwd || null)
       if (w.blinoDir) setBlinoDir(w.blinoDir)
-      setWorkflow(s)
       setSkillFiles(sk.files || [])
       setSkillNames(sk.names || [])
 
-      if (activeSessionId) {
-        const r = await fetch(`${blinoUrl}/api/sessions/${activeSessionId}`)
-        if (r.ok) {
-          const d = await r.json() as { workflow?: typeof wfInSession }
-          if (d.workflow) setWfInSession(d.workflow)
-        }
-      } else {
-        setWfInSession(null)
-      }
     } catch (e) {
       setMessage((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [blinoUrl, activeSessionId])
+  }, [blinoUrl])
 
   useEffect(() => {
     if (open) void loadAll()
@@ -101,34 +81,6 @@ export function ProjectSettingsPanel({
       }
     } catch (e) {
       setMessage((e as Error).message)
-    }
-  }
-
-  const shiftPhase = async (delta: 1 | -1) => {
-    if (!activeSessionId) {
-      setMessage('需要活动会话。请先向 Agent 发送一条消息。')
-      return
-    }
-    setPhaseBusy(true)
-    setMessage(null)
-    try {
-      const r = await fetch(`${blinoUrl}/api/sessions/${activeSessionId}/workflow/phase`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delta }),
-      })
-      const d = await r.json().catch(() => ({})) as { ok?: boolean; message?: string; skillNames?: string[]; activePhaseId?: string; activePhaseIndex?: number }
-      if (r.ok && d?.ok !== false) {
-        setWfInSession(p => p ? { ...p, activePhaseId: d.activePhaseId, activePhaseIndex: d.activePhaseIndex } : null)
-        if (d.skillNames) setSkillNames(d.skillNames)
-        setMessage(d.message || '已切换阶段')
-      } else {
-        setMessage((d as { message?: string }).message || '无法切换（是否有 workflow 多阶段？）')
-      }
-    } catch (e) {
-      setMessage((e as Error).message)
-    } finally {
-      setPhaseBusy(false)
     }
   }
 
@@ -185,10 +137,6 @@ export function ProjectSettingsPanel({
 
   if (!open) return null
 
-  const pol = workflow?.policy as { profile?: string; phases?: { id: string }[] } | null
-  const phaseCount = pol?.phases?.length || 0
-  const phIdx = (wfInSession?.activePhaseIndex ?? 0) + 1
-
   return (
     <div
       role="dialog"
@@ -205,7 +153,8 @@ export function ProjectSettingsPanel({
     >
       <aside
         style={{
-          width: 'min(420px, 100vw)',
+          width: 'min(560px, 100vw)',
+          maxWidth: '100vw',
           height: '100%',
           background: 'var(--bg-primary)',
           borderLeft: '0.5px solid var(--border-default)',
@@ -223,7 +172,7 @@ export function ProjectSettingsPanel({
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px 18px', WebkitOverflowScrolling: 'touch' }}>
           {loading ? (
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>加载中…</p>
           ) : (
@@ -243,46 +192,12 @@ export function ProjectSettingsPanel({
                 </p>
               </details>
 
-              <p style={labelStyle}>工作流 (workflow.json)</p>
-              {workflow?.error
-                ? <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>未加载或无效：{workflow.error}</p>
-                : (
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      {pol?.profile ? <><strong>profile</strong>: {pol.profile}<br /></> : null}
-                      {phaseCount > 0
-                        ? (
-                            <>
-                              阶段 {phIdx} / {phaseCount}
-                              {wfInSession?.activePhaseId
-                                ? <> · 当前 <code>{wfInSession.activePhaseId}</code></>
-                                : null}
-                            </>
-                          )
-                        : '无 phases 或仅单阶段'}
-                    </p>
-                  )}
-
-              {phaseCount > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <button
-                    type="button"
-                    onClick={() => { void shiftPhase(-1) }}
-                    disabled={phaseBusy || !activeSessionId}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '0.5px solid var(--border-default)', background: 'var(--bg-secondary)', cursor: phaseBusy ? 'wait' : 'pointer' }}
-                  >
-                    <ChevronLeft width={16} height={16} style={{ display: 'block' }} />
-                  </button>
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>阶段</span>
-                  <button
-                    type="button"
-                    onClick={() => { void shiftPhase(1) }}
-                    disabled={phaseBusy || !activeSessionId}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '0.5px solid var(--border-default)', background: 'var(--bg-secondary)', cursor: phaseBusy ? 'wait' : 'pointer' }}
-                  >
-                    <ChevronRight width={16} height={16} style={{ display: 'block' }} />
-                  </button>
-                </div>
-              )}
+              <ProjectWorkflowSection
+                blinoUrl={blinoUrl}
+                sessionId={activeSessionId}
+                open={open}
+                onPhaseChanged={() => { void loadAll() }}
+              />
 
               <p style={labelStyle}>项目内技能文件</p>
               <ul style={{ margin: '0 0 12px', paddingLeft: 16, maxHeight: 120, overflowY: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>

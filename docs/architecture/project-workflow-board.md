@@ -20,7 +20,7 @@
 
 ### 2.0 Mermaid 流程图（可选）
 
-- 在 **`.blino/workflow.json`** 根级可增加可选字段 **`mermaid`**（字符串）：合法 **Mermaid** 源码，由 **Web `WorkflowBar`** 内嵌渲染（`mermaid` npm 包，`securityLevel: 'strict'`）。
+- 在 **`.blino/workflow.json`** 根级可增加可选字段 **`mermaid`**（字符串）：合法 **Mermaid** 源码，由 **「项目」侧栏** 内 `ProjectWorkflowSection` 渲染（`mermaid` npm 包，`securityLevel: 'strict'`）。
 - **未写 `mermaid`** 时，UI 根据 **`phases`** 自动生成简易 **`flowchart LR`**（`P0 -> P1 -> ...`），当前阶段在标签前加 **`▶`** 以便区分。
 - 该字符串**不**注入 LLM `system` prompt；仅影响浏览器展示。
 
@@ -68,23 +68,15 @@
 
 ## 三、UI/UX 设计
 
-### 3.1 布局（建议）
+### 3.1 布局（当前 P1）
 
-- **主聊天区**保持现有布局；在 **header 下缘** 或 **输入框上缘** 增加一条**薄工具条**（可折叠）：
-  - 左：Profile 名 + 阶段 **Stepper**（1 / N 圆点或短标签，当前步高亮）。
-  - 中：轻量 **← / →**（与「项目」里阶段切换同 API，需 `sessionId`）。
-  - 右：**展开看板**（若 `board.json` 有数据或用户开启「显示看板」开关）。
-- **展开态**：自顶部滑下或右侧 **Drawer**（与「项目」一致 z-index 层级），内为：
-  - 上：阶段条（同条栏放大版）+ 文案说明每步 `notes`。
-  - 下（Phase 2）：**Kanban 三列** + 拖拽（可选）或「添加卡片」表单。
-
-不强制占满屏，避免主对话「过重」；默认 **折叠为一条** 符合你之前「主界面不要过重」的取向。
+- **主聊天区不展示**工作流/泳道/Mermaid，避免与对话抢注意力。
+- **「项目」侧栏**加宽（约 560px），内 **`ProjectWorkflowSection`**：profile、阶段标签、**← / →**、当前说明、**Mermaid 图**（`max-height` + 区内容器滚动，防大图撑破布局）。
+- **P2+**：可选在侧栏下再叠 Kanban 或全屏 `BoardDrawer`（未做）。
 
 ### 3.2 与「项目」侧栏关系
 
-- **侧栏**：配置、CORS、长列表、Skill 安装/查看、创建 Skill 向导 — **保持**。
-- **顶栏/条带**：**高频**的「我在第几步、点一下到下一步」— **新能力**。
-- 避免重复：侧栏可保留阶段按钮；条带为快捷入口，数据同源 API。
+- 工作流、流图、阶段切换**全部**在侧栏，与技能列表、重载、Skill 装在同一面板内上下滚动；无顶栏工作流条。
 
 ### 3.3 无 session 时
 
@@ -111,10 +103,11 @@
 
 | 模块 | 职责 |
 |------|------|
-| `WorkflowBar.tsx` | 条带：profile、stepper、阶段切换、轮询/聚焦刷新 |
-| `BoardDrawer.tsx`（P2） | 展开大视图 + Kanban |
+| `ProjectWorkflowSection.tsx` | **项目**侧栏内：profile、阶段标签、上一/下一阶段、Mermaid 图区（可滚动）；轮询 |
+| `ProjectSettingsPanel.tsx` | 加宽侧栏壳、工作区、内嵌 `ProjectWorkflowSection`、技能列表等 |
+| `BoardDrawer.tsx`（P2） | 可选：Kanban |
 | `boardApi.ts` | `fetch` 封装、类型与 `board.json` 对齐 |
-| `page.tsx` | 挂 `WorkflowBar`、传入 `blinoUrl`、`activeSessionId`、可选 `onOpenProject` 跳转项目设置 |
+| `page.tsx` | 打开「项目」时展示侧栏；主聊天区**不**挂工作流条 |
 
 **状态源**：`activeSessionId` 已有；轮询时若 `!activeSessionId` 仅 `GET /api/workflow` + 可选 `GET /api/board`。
 
@@ -129,13 +122,13 @@
 
 ## 七、实现阶段（可交付粒）
 
-### P1 — 工作流条带（MVP，推荐先交付）— **已实现**
+### P1 — 工作流区（MVP）— **已实现（主对话不展示流）**
 
 - [x] 后端：`GET /api/sessions/:id/workflow` — 仅返回 `workflow` 摘要 + `phases` 元数据（**无 messages**），供轮询。
-- [x] 前端：`WorkflowBar`（`ui/src/components/WorkflowBar.tsx`）+ 嵌于 `page.tsx` header 下，可折叠。
-- [x] 数据：约 4s 轮询 `GET /api/workflow` + 有 session 时 `GET /api/sessions/:id/workflow`。
-- [x] 操作：有 session 且多阶段时 `POST .../workflow/phase`；无 session 时切换禁用；无 `workflow.json` 时条带内轻提示并可打开「项目」。
-- [ ] 验收：切阶段后条带与「项目」内阶段一致；**无 LLM 上下文变化**（纯 UI + 轻量 API）。
+- [x] 前端：`ProjectWorkflowSection` 在 **「项目」侧栏**（约 `min(560px, 100vw)`），含 Mermaid；图形容器 `max-height: min(50vh, 480px)` + **overflow:auto**；**已移除** 主界面 `WorkflowBar`。
+- [x] 数据：面板打开时约 4s 轮询 `GET /api/workflow` + 有 session 时 `GET /api/sessions/:id/workflow`。
+- [x] 操作：有 session 且多阶段时 `POST .../workflow/phase`；无 `workflow.json` 时侧栏内提示。
+- [ ] 验收：**无** LLM 上下文变化（纯 UI + 轻量 API）。
 
 ### P2 — `.blino/board.json` + 读写 API + 轻看板
 
