@@ -16,7 +16,7 @@
 ### 方式一：npm 全局安装（推荐）
 
 ```bash
-npm install -g blino
+npm install -g blino-agent
 ```
 
 安装完成后直接使用：

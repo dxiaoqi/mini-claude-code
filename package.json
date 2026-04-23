@@ -1,5 +1,5 @@
 {
-  "name": "blino",
+  "name": "blino-agent",
   "version": "0.1.0",
   "type": "module",
   "description": "Blino — AI coding agent with web UI, tool use, MCP and visual diagram generation",
