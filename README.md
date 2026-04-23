@@ -300,6 +300,20 @@ Agent 执行高风险操作时（如删除文件、执行 shell 脚本），会�
 
 ## Skill 系统
 
+在 `.blino/skills/` 下创建 Markdown 文件来定义可复用的工作流。
+
+**脚手架「Skill Creator」**：安装 `blino-agent` 后，将包内模板复制到项目中即可使用：
+
+```bash
+mkdir -p .blino/skills
+cp "$(npm root -g)/blino-agent/templates/blino-skills/skill-creator.md" .blino/skills/
+# 若用本地开发包：cp node_modules/blino-agent/templates/blino-skills/skill-creator.md .blino/skills/
+```
+
+然后在对话里让模型执行 **Skill `skill-creator`**，它会按引导创建或扩展 **`.blino/workflow.json`** 与各 **`.blino/skills/<pack>/`** 目录。模板正文见仓库 `templates/blino-skills/skill-creator.md`。
+
+### 手写 skill 示例
+
 在 `.blino/skills/` 下创建 Markdown 文件来定义可复用的工作流：
 
 ```markdown

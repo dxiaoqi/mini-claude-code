@@ -33,6 +33,7 @@
     "bin",
     "ui-standalone",
     "ui/skill-pack",
+    "templates",
     "scripts/postbuild.js",
     "README.md"
   ],
