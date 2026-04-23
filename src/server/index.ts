@@ -13,6 +13,7 @@
  *   POST /api/sessions/:id/chat              — 发消息（SSE 流式返回）
  *   POST /api/sessions/:id/compact           — 手动压缩
  *   POST /api/permission/:requestId/respond  — 权限弹窗回调
+ *   POST /api/init/skill-creator            — 将内置 skill-creator 写入 .blino/skills/
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -26,6 +27,7 @@ import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
 import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
 import { getBlinoDir } from '../utils/paths.js'
+import { installSkillCreator } from '../utils/installSkillCreator.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -234,6 +236,23 @@ export function createBlinoServer(config: ServerConfig) {
         json(res, basePayload)
       } catch {
         json(res, {})
+      }
+      return
+    }
+
+    // ── POST /api/init/skill-creator  (install built-in skill-creator for Web UI) ──
+    if (method === 'POST' && path === '/api/init/skill-creator') {
+      try {
+        const body = (await readBody(req)) as { force?: boolean }
+        const r = await installSkillCreator(config.cwd, { force: body?.force === true })
+        json(res, {
+          ok: r.ok,
+          path: r.path,
+          created: r.created,
+          message: r.message,
+        }, r.ok ? 200 : 500)
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 500)
       }
       return
     }

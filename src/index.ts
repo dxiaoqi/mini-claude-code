@@ -112,5 +112,6 @@ export { loadSettings, saveSetting, persistPermissionRules, loadPermissionRules 
 export { getBlinoDir, WORKFLOW_FILE } from './utils/paths.js'
 export { loadWorkflowPolicy, getWorkflowPath, mergeSettingsWithPolicy } from './utils/workflow.js'
 export { applyWorkflowRuntimeToState, advanceWorkflowPhase } from './utils/workflowRuntime.js'
+export { installSkillCreator } from './utils/installSkillCreator.js'
 export { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
 export { runPreToolUseHooks, runPostToolUseHooks, runStopHooks } from './utils/hooks.js'

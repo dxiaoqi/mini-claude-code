@@ -105,6 +105,8 @@
 2. **P2**：已合入（本段）。  
 3. **P3**：按产品优先级排期。
 
+**内置 skill-creator**：`blino init`、HTTP `POST /api/init/skill-creator`、Web 设置中「安装 skill-creator」— 将模板写入 `.<blino>/skills/skill-creator.md`（`src/utils/installSkillCreator.ts`）。
+
 ---
 
 *文档可随实现更新； major 行为变更时同步更新本节「当前项目内容」。*

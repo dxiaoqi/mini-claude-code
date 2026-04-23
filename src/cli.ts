@@ -95,6 +95,23 @@ program
   .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.blino/projects/<hash>/<sessionId>.trace.jsonl')
   .argument('[prompt]', 'Initial prompt (or pipe via stdin with -p)')
 
+program
+  .command('init')
+  .description('Install built-in project skills (skill-creator) into .blino/skills/')
+  .option('--force', 'Overwrite existing .blino/skills/skill-creator.md')
+  .action(async (opts: { force?: boolean }) => {
+    const { installSkillCreator } = await import('./utils/installSkillCreator.js')
+    const r = await installSkillCreator(process.cwd(), { force: opts.force === true })
+    if (r.ok) {
+      console.log(r.message)
+      console.log(r.path)
+      process.exit(0)
+    } else {
+      console.error(chalk.red(r.message))
+      process.exit(1)
+    }
+  })
+
 program.action(async (prompt: string | undefined, options: Record<string, unknown>) => {
   const cwd = process.cwd()
 

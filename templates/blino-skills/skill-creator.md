@@ -94,9 +94,11 @@ description: What to do in this pack (one line)
 
 写最小 `workflow.json`（`schemaVersion` + `profile: "default"`）+ 空目录 `.blino/skills/` 即可，并说明可再运行本 skill 或手改。
 
-## 获得本技能（模板来源）
+## 获得本技能（内置，推荐）
 
-- 从已安装的包复制：`node_modules/blino-agent/templates/blino-skills/skill-creator.md` → 项目内 **`.blino/skills/skill-creator.md`**。  
-- 从源码：仓库根 `templates/blino-skills/skill-creator.md`。
+- **CLI**（在仓库/项目根执行）：`blino init` — 会写入 **`.blino/skills/skill-creator.md`**（已存在时跳过，可用 `blino init --force` 覆盖）。  
+- **Web UI**：打开「设置」→ 点击 **「安装 skill-creator」**（调用后端 `POST /api/init/skill-creator`）。
 
-装好后在对话中执行 **Skill: `skill-creator`**（可带 `args` 描述场景），即可让模型按上文学步脚手架。
+装好后在对话中执行 **Skill: `skill-creator`**（可带 `args` 描述场景），让模型按上文脚手架 `workflow.json` 与各 pack。
+
+手动复制（可选）：`node_modules/blino-agent/templates/blino-skills/skill-creator.md` 或包内同路径。
