@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { X, ChevronLeft, ChevronRight, RefreshCw, Sparkles, HelpCircle, FolderCode } from 'lucide-react'
+import { SkillCreatorInstallOrView } from '@/components/SkillCreatorInstallOrView'
 
 const labelStyle: CSSProperties = {
   display: 'block',
@@ -39,7 +40,6 @@ export function ProjectSettingsPanel({
   } | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [initLoading, setInitLoading] = useState(false)
   const [phaseBusy, setPhaseBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [designHistory, setDesignHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
@@ -101,33 +101,6 @@ export function ProjectSettingsPanel({
       }
     } catch (e) {
       setMessage((e as Error).message)
-    }
-  }
-
-  const installCreator = async () => {
-    setInitLoading(true)
-    setMessage(null)
-    try {
-      const r = await fetch(`${blinoUrl}/api/init/skill-creator`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const d = await r.json().catch(() => ({})) as { ok?: boolean; message?: string; error?: string; path?: string; created?: boolean }
-      if (d?.ok) {
-        setMessage(
-          d.created
-            ? `已写入 ${d.path}。请点击「重载与刷新」以更新列表。`
-            : d.message || '已存在',
-        )
-      } else {
-        setMessage(d.error || '安装失败')
-      }
-      void loadAll()
-    } catch (e) {
-      setMessage((e as Error).message)
-    } finally {
-      setInitLoading(false)
     }
   }
 
@@ -327,14 +300,16 @@ export function ProjectSettingsPanel({
                 >
                   <RefreshCw width={14} height={14} /> 重载与刷新
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { void installCreator() }}
-                  disabled={initLoading}
-                  style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, border: '0.5px solid var(--border-default)', background: 'var(--bg-secondary)', cursor: initLoading ? 'wait' : 'pointer' }}
-                >
-                  {initLoading ? '…' : '安装 skill-creator'}
-                </button>
+                <div style={{ flex: '1 1 180px', minWidth: 140 }}>
+                  <SkillCreatorInstallOrView
+                    blinoUrl={blinoUrl}
+                    panelOpen={open}
+                    fullWidth
+                    compact
+                    onMessage={setMessage}
+                    onAfterInstall={() => { void loadAll() }}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => { setCreateOpen(true); setDesignHistory([]); setProposed(null); setDesignInput('') }}

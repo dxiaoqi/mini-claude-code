@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { X } from 'lucide-react'
+import { SkillCreatorInstallOrView } from '@/components/SkillCreatorInstallOrView'
 
 export interface ApiConfigResponse {
   model: string
@@ -57,8 +58,6 @@ export function ApiSettingsPanel({ blinoUrl, open, onClose }: Props) {
   const [openaiKey, setOpenaiKey] = useState('')
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false)
   const [hasOpenaiKey, setHasOpenaiKey] = useState(false)
-  const [initSkillLoading, setInitSkillLoading] = useState(false)
-
   const load = useCallback(async () => {
     setLoading(true)
     setMessage(null)
@@ -95,35 +94,6 @@ export function ApiSettingsPanel({ blinoUrl, open, onClose }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
-
-  const installSkillCreator = async () => {
-    setInitSkillLoading(true)
-    setMessage(null)
-    try {
-      const r = await fetch(`${blinoUrl}/api/init/skill-creator`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const d = await r.json().catch(() => ({})) as { ok?: boolean; message?: string; error?: string; path?: string; created?: boolean }
-      if (!r.ok && d?.ok === false) {
-        throw new Error(d.error || '安装失败')
-      }
-      if (d?.ok) {
-        setMessage(
-          d.created
-            ? `已写入 ${d.path ?? '.blino/skills/skill-creator.md'}，对话中可执行 Skill「skill-creator」。`
-            : (d.message || '已存在，未覆盖。新开会话或重载后可用。'),
-        )
-      } else {
-        setMessage((d as { message?: string }).message || '未返回状态')
-      }
-    } catch (e) {
-      setMessage((e as Error).message)
-    } finally {
-      setInitSkillLoading(false)
-    }
-  }
 
   const save = async () => {
     setSaving(true)
@@ -308,25 +278,11 @@ export function ApiSettingsPanel({ blinoUrl, open, onClose }: Props) {
                   将内置的 <code style={{ fontSize: '11px' }}>skill-creator</code> 写入项目{' '}
                   <code style={{ fontSize: '11px' }}>.blino/skills/</code>，用于脚手架 workflow 与各阶段 skill 包。
                 </p>
-                <button
-                  type="button"
-                  onClick={() => { void installSkillCreator() }}
-                  disabled={initSkillLoading}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    color: 'var(--text-primary)',
-                    background: 'var(--bg-secondary)',
-                    border: '0.5px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: initSkillLoading ? 'wait' : 'pointer',
-                    opacity: initSkillLoading ? 0.7 : 1,
-                  }}
-                >
-                  {initSkillLoading ? '安装中…' : '安装 skill-creator'}
-                </button>
+                <SkillCreatorInstallOrView
+                  blinoUrl={blinoUrl}
+                  panelOpen={open}
+                  onMessage={setMessage}
+                />
               </div>
 
               {message && (
