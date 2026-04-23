@@ -54,6 +54,9 @@ coverage/
 #  运行时数据（~/.blino 风格，但如果在项目内）
 # ──────────────────────────────────────────────
 .blino/settings.local.json
+# 测试用工作区真密钥
+playground/blino-smoke/.blino/settings.json
+playground/blino-smoke/.blino/settings.local.json
 
 # ──────────────────────────────────────────────
 #  日志

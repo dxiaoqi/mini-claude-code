@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "playground",
+  "phases": [
+    {
+      "id": "pack-a",
+      "notes": "仅加载 demo-a pack",
+      "activateSkillPacks": ["demo-a"]
+    },
+    {
+      "id": "pack-b",
+      "notes": "仅加载 demo-b pack",
+      "activateSkillPacks": ["demo-b"]
+    }
+  ]
+}
