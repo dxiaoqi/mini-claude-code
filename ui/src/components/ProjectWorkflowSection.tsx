@@ -16,6 +16,7 @@ type WorkflowStatic = {
     mermaid?: string
     phases?: PhaseInfo[]
   } | null
+  workflowManager?: { mode?: 'manual' | 'advisory' | 'auto' }
 }
 
 type SessionWorkflow = {
@@ -26,6 +27,7 @@ type SessionWorkflow = {
   profile?: string
   mermaid?: string
   phases?: PhaseInfo[]
+  workflowManager?: { mode?: 'manual' | 'advisory' | 'auto' }
 }
 
 const POLL_MS = 4000
@@ -82,6 +84,7 @@ export function ProjectWorkflowSection({
   const [sessionWf, setSessionWf] = useState<SessionWorkflow | null>(null)
   const [loading, setLoading] = useState(false)
   const [phaseBusy, setPhaseBusy] = useState(false)
+  const [mgrBusy, setMgrBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -155,6 +158,35 @@ export function ProjectWorkflowSection({
     () => !mermaidCustom || !isReasonableMermaidSource(mermaidCustom),
     [mermaidCustom],
   )
+
+  const workflowMode = sessionWf?.workflowManager?.mode
+    ?? staticWf?.workflowManager?.mode
+    ?? 'manual'
+
+  const setWorkflowMode = async (mode: 'manual' | 'advisory' | 'auto') => {
+    setMgrBusy(true)
+    setHint(null)
+    try {
+      const path = sessionId
+        ? `${blinoUrl}/api/sessions/${sessionId}/workflow/manager`
+        : `${blinoUrl}/api/workflow/manager`
+      const r = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      const d = await r.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!r.ok || d?.ok === false) {
+        setHint(d?.error || '无法更新工作流模式')
+        return
+      }
+      await Promise.all([fetchStatic(), fetchSessionWf()])
+    } catch (e) {
+      setHint((e as Error).message)
+    } finally {
+      setMgrBusy(false)
+    }
+  }
 
   const shiftPhase = async (delta: 1 | -1) => {
     if (!sessionId) {
@@ -321,13 +353,60 @@ export function ProjectWorkflowSection({
           </p>
         )}
 
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 10,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <span style={{ fontWeight: 600, color: 'var(--text-tertiary)' }}>调度</span>
+          {(['manual', 'advisory', 'auto'] as const).map((m) => {
+            const active = workflowMode === m
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={mgrBusy}
+                onClick={() => { void setWorkflowMode(m) }}
+                title={
+                  m === 'manual'
+                    ? '仅由你切换阶段（面板 / /phase）'
+                    : m === 'advisory'
+                      ? '你可切换；主 Agent 也可用 WorkflowPhase 工具在明确需要时改阶段'
+                      : '主 Agent 应用 WorkflowPhase 按里程碑对齐阶段（不确定时先问）'
+                }
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 'var(--radius-md)',
+                  border: `0.5px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                  background: active ? 'var(--accent-bg)' : 'var(--bg-input)',
+                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                  cursor: mgrBusy ? 'wait' : 'pointer',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {m === 'manual' ? '手动' : m === 'advisory' ? '建议' : '自动'}
+              </button>
+            )
+          })}
+          {mgrBusy && (
+            <Loader2 width={12} height={12} style={{ color: 'var(--text-tertiary)', animation: 'spin-accent 0.9s linear infinite' }} aria-hidden />
+          )}
+        </div>
+
         {hasWorkflow && (
           <details style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.55 }}>
             <summary style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' as const }}>
-              为什么需要手动切换阶段？
+              为什么常要手动切换阶段？
             </summary>
             <p style={{ margin: '8px 0 0' }}>
-              各阶段在 <code style={{ fontSize: 10 }}>workflow.json</code> 中定义，会决定**当前**加载哪几个 skill 包。Agent 无法仅凭对话就可靠地判断你处于业务流程的哪一步，所以由你通过 ← / →（或终端 <code style={{ fontSize: 10 }}>/phase</code>）显式切换。悬停流程图节点可查看该阶段的说明与包。
+              各阶段在 <code style={{ fontSize: 10 }}>workflow.json</code> 中定义，会决定**当前**加载哪几个 skill 包。默认（手动）下 Agent 不能可靠推断业务阶段，因此由你通过 ← / → 或 <code style={{ fontSize: 10 }}>/phase</code> 切换。开启「建议」或「自动」后，主 Agent 可调用 <code style={{ fontSize: 10 }}>WorkflowPhase</code>（需先通过 ToolSearch 加载）在适当时机更新阶段。悬停流程图节点可查看说明与包。
             </p>
           </details>
         )}

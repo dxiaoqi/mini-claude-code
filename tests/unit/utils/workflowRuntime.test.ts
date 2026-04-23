@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createSessionState, clearSession } from '../../../src/state/SessionState.js'
-import { applyWorkflowRuntimeToState, advanceWorkflowPhase } from '../../../src/utils/workflowRuntime.js'
+import { applyWorkflowRuntimeToState, advanceWorkflowPhase, setWorkflowPhaseById } from '../../../src/utils/workflowRuntime.js'
 import type { Settings } from '../../../src/types.js'
 
 describe('workflowRuntime', () => {
@@ -49,5 +49,26 @@ describe('workflowRuntime', () => {
     const s = createSessionState({ cwd: '/tmp', settings: {} })
     const r = advanceWorkflowPhase(s, 1)
     expect(r.ok).toBe(false)
+  })
+
+  it('setWorkflowPhaseById sets index by phase id', () => {
+    const s = createSessionState({
+      cwd: '/tmp',
+      settings: { projectPolicy: { ...policy } } as Settings,
+    })
+    const r = setWorkflowPhaseById(s, 'b')
+    expect(r.ok).toBe(true)
+    expect(s.activePhaseId).toBe('b')
+    expect(s.activePhaseIndex).toBe(1)
+  })
+
+  it('setWorkflowPhaseById fails for unknown id', () => {
+    const s = createSessionState({
+      cwd: '/tmp',
+      settings: { projectPolicy: { ...policy } } as Settings,
+    })
+    const r = setWorkflowPhaseById(s, 'nope')
+    expect(r.ok).toBe(false)
+    expect(s.activePhaseId).toBe('a')
   })
 })

@@ -17,6 +17,7 @@
  *   GET  /api/workspace                     — 工作区路径与 .blino 根名
  *   GET  /api/workflow                      — 当前项目 workflow 摘要
  *   GET  /api/sessions/:id/workflow         — 仅会话 workflow 摘要（无 messages，供轮询）
+ *   POST /api/sessions/:id/workflow/manager  — 设置 workflowManager.mode（写 local settings）
  *   GET  /api/skills                        — 技能文件列表
  *   POST /api/sessions/:id/refresh         — 重载磁盘配置并刷新技能缓存
  *   POST /api/sessions/:id/workflow/phase  — 切换阶段 (delta)
@@ -33,7 +34,7 @@ import { createSessionState } from '../state/SessionState.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
-import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
+import { loadSettings, getLocalConfigPath, resolveApiConfig, saveSetting } from '../utils/config.js'
 import { getBlinoDir } from '../utils/paths.js'
 import { installSkillCreator } from '../utils/installSkillCreator.js'
 import { loadWorkflowPolicy, getWorkflowPath } from '../utils/workflow.js'
@@ -57,6 +58,7 @@ import type {
   SessionState,
   Settings,
   Tool,
+  WorkflowManagerMode,
 } from '../types.js'
 
 interface SessionEntry {
@@ -415,14 +417,39 @@ export function createBlinoServer(config: ServerConfig) {
     if (method === 'GET' && path === '/api/workflow') {
       try {
         const { policy, error: wfErr } = await loadWorkflowPolicy(config.cwd)
+        const fileS = (await loadSettings(config.cwd).catch(() => ({}))) as Settings
         json(res, {
           ok: !wfErr,
           path: getWorkflowPath(config.cwd),
           error: wfErr,
           policy: policy || null,
+          workflowManager: fileS.workflowManager ?? { mode: 'manual' },
         })
       } catch (e) {
         json(res, { error: (e as Error).message }, 500)
+      }
+      return
+    }
+
+    // ── POST /api/workflow/manager  { mode } — 写 .blino/settings.local.json，无需 session（仅本机/loopback）──
+    if (method === 'POST' && path === '/api/workflow/manager') {
+      if (!isLoopbackRemote(req) && browserSentOrigin(req)) {
+        return json(res, { error: 'Forbidden' }, 403)
+      }
+      const body = (await readBody(req)) as { mode?: string }
+      const m = (body?.mode || '').trim() as WorkflowManagerMode
+      if (m !== 'manual' && m !== 'advisory' && m !== 'auto') {
+        return json(res, { error: 'mode must be manual, advisory, or auto' }, 400)
+      }
+      try {
+        await saveSetting('local', config.cwd, 'workflowManager', { mode: m })
+        for (const e of sessions.values()) {
+          e.state.settings = { ...e.state.settings, workflowManager: { mode: m } }
+          e.state.systemPromptSectionCache.clear()
+        }
+        json(res, { ok: true, workflowManager: { mode: m } })
+      } catch (err) {
+        json(res, { ok: false, error: (err as Error).message }, 500)
       }
       return
     }
@@ -576,6 +603,7 @@ export function createBlinoServer(config: ServerConfig) {
         notes: p.notes,
         activateSkillPacks: p.activateSkillPacks,
       })) ?? []
+      const wm = entry.state.settings.workflowManager
       json(res, {
         workflow: {
           activePhaseId: entry.state.activePhaseId,
@@ -585,8 +613,38 @@ export function createBlinoServer(config: ServerConfig) {
           profile: policy?.profile,
           mermaid: policy?.mermaid,
           phases,
+          workflowManager: wm?.mode
+            ? { mode: wm.mode }
+            : { mode: 'manual' as WorkflowManagerMode },
         },
       })
+      return
+    }
+
+    // ── POST /api/sessions/:id/workflow/manager  { mode: "manual" | "advisory" | "auto" } ──
+    const sessionWfManager = path.match(/^\/api\/sessions\/([^/]+)\/workflow\/manager$/)
+    if (method === 'POST' && sessionWfManager) {
+      if (!isLoopbackRemote(req) && browserSentOrigin(req)) {
+        return json(res, { error: 'Forbidden' }, 403)
+      }
+      const entry = sessions.get(sessionWfManager[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const body = (await readBody(req)) as { mode?: string }
+      const m = (body?.mode || '').trim() as WorkflowManagerMode
+      if (m !== 'manual' && m !== 'advisory' && m !== 'auto') {
+        return json(res, { error: 'mode must be manual, advisory, or auto' }, 400)
+      }
+      try {
+        await saveSetting('local', config.cwd, 'workflowManager', { mode: m })
+        entry.state.settings = {
+          ...entry.state.settings,
+          workflowManager: { mode: m },
+        }
+        entry.state.systemPromptSectionCache.clear()
+        json(res, { ok: true, workflowManager: { mode: m } })
+      } catch (e) {
+        json(res, { ok: false, error: (e as Error).message }, 500)
+      }
       return
     }
 

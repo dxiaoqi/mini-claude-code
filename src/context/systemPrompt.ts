@@ -113,6 +113,9 @@ function getToolUseSection(enabledToolNames: string[]): string {
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`
       : null,
+    enabledToolNames.includes('WorkflowPhase')
+      ? `Project workflow: use ToolSearch to load WorkflowPhase when you need to change the active workflow phase. Call WorkflowPhase with a phase id from workflow.json. Only switch when the user's goal clearly matches the next phase.`
+      : null,
   ].filter(Boolean)
 
   return `# Using your tools\n\n${items.join('\n')}`
@@ -163,10 +166,24 @@ function getWorkflowSection(state: SessionState): string | null {
     }
   }
 
-  lines.push(
-    '',
-    'To change phase in the terminal, use `/phase next` or `/phase prev` when workflow.json defines multiple phases.',
-  )
+  const mode = state.settings.workflowManager?.mode ?? 'manual'
+  if (mode === 'manual') {
+    lines.push(
+      '',
+      '- **Workflow control**: Stages are switched only by the user (Project panel, or `/phase next` / `prev` in the terminal).',
+    )
+  } else if (mode === 'advisory') {
+    lines.push(
+      '',
+      '- **Workflow control**: The user may also switch stages manually. You may use **WorkflowPhase** (load via ToolSearch) to advance to a `workflow.json` phase id when the task clearly requires it. Prefer one explicit phase per milestone.',
+    )
+  } else {
+    // auto
+    lines.push(
+      '',
+      '- **Workflow control (auto)**: You are expected to keep the run aligned with the workflow: when you finish a milestone that matches a phase in `workflow.json`, use **WorkflowPhase** (load via ToolSearch) to set the current phase. If unsure, use AskUser before switching.',
+    )
+  }
 
   return lines.join('\n')
 }
@@ -194,15 +211,20 @@ export async function buildSystemPrompt(
 ): Promise<SystemPromptBlock[]> {
   const blocks: SystemPromptBlock[] = []
 
+  const forPrompt = (t: Tool) => {
+    if (t.shouldIncludeInApi && !t.shouldIncludeInApi({ state })) return false
+    return !t.shouldDefer || t.alwaysLoad
+  }
+
   // ── 静态区（cacheScope: 'global'，跨会话可缓存）──
   const enabledToolNames = tools
-    .filter(t => !t.shouldDefer || t.alwaysLoad)
+    .filter(forPrompt)
     .map(t => t.name)
 
   const staticParts: string[] = [getBaseSystemPrompt(enabledToolNames)]
 
   // 活跃工具描述（非 deferred）
-  const activeTools = tools.filter(t => !t.shouldDefer || t.alwaysLoad)
+  const activeTools = tools.filter(forPrompt)
   const toolDescriptions = activeTools.map(t => {
     const desc = typeof t.description === 'string' ? t.description : t.name
     return `- **${t.name}**: ${desc}`

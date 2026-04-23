@@ -25,6 +25,7 @@ import { ImageReadTool } from './tools/content/ImageReadTool.js'
 import { PDFReadTool } from './tools/content/PDFReadTool.js'
 import { createToolSearchTool } from './tools/ToolSearchTool.js'
 import { SkillTool, invalidateSkillCache } from './tools/interaction/SkillTool.js'
+import { WorkflowPhaseTool } from './tools/workflow/WorkflowPhaseTool.js'
 import { advanceWorkflowPhase } from './utils/workflowRuntime.js'
 import { TodoWriteTool, clearTodos } from './tools/interaction/TodoWriteTool.js'
 import { AskUserTool } from './tools/interaction/AskUserTool.js'
@@ -223,7 +224,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   const coreTools: Tool[] = [
     BashTool, FileReadTool, FileEditTool, FileWriteTool,
     GlobTool, GrepTool,
-    TodoWriteTool, AskUserTool, SkillTool,
+    TodoWriteTool, AskUserTool, SkillTool, WorkflowPhaseTool,
     SendMessageTool, TaskStopTool, TaskOutputTool,
   ]
 
@@ -360,7 +361,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     const allBaseToolsForServer: Tool[] = [
       BashTool, FileReadTool, FileEditTool, FileWriteTool,
       GlobTool, GrepTool,
-      TodoWriteTool, AskUserTool, SkillTool,
+      TodoWriteTool, AskUserTool, SkillTool, WorkflowPhaseTool,
       SendMessageTool, TaskStopTool, TaskOutputTool,
       // deferred 工具
       WebFetchTool, webSearchTool, NotebookEditTool, ImageReadTool, PDFReadTool,

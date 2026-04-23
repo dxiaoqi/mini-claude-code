@@ -61,3 +61,35 @@ export function advanceWorkflowPhase(
     activePhaseIndex: idx,
   }
 }
+
+/**
+ * 将当前阶段设为给定 id；unknown id 时返回失败（不猜）。
+ */
+export function setWorkflowPhaseById(
+  state: SessionState,
+  phaseId: string,
+): AdvancePhaseResult {
+  const id = phaseId?.trim()
+  const phases = state.settings.projectPolicy?.phases
+  if (!phases?.length) {
+    return { ok: false, message: 'No workflow phases in project .blino/workflow.json' }
+  }
+  if (!id) {
+    return { ok: false, message: 'phaseId is required' }
+  }
+  const idx = phases.findIndex(p => p.id === id)
+  if (idx < 0) {
+    return {
+      ok: false,
+      message: `Unknown phase id "${id}". Valid: ${phases.map(p => p.id).join(', ')}`,
+    }
+  }
+  state.activePhaseIndex = idx
+  applyWorkflowRuntimeToState(state)
+  return {
+    ok: true,
+    message: `Phase: ${state.activePhaseId} (${(idx + 1)}/${phases.length})`,
+    activePhaseId: state.activePhaseId,
+    activePhaseIndex: idx,
+  }
+}

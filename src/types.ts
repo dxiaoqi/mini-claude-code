@@ -123,6 +123,9 @@ export interface ToolResultBlockParam {
   is_error?: boolean
 }
 
+/** 工作流调度：由谁决定阶段切换（写入 session 的 active phase / skill packs） */
+export type WorkflowManagerMode = 'manual' | 'advisory' | 'auto'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Tool<Input = any, Output = any> {
   name: string
@@ -151,6 +154,12 @@ export interface Tool<Input = any, Output = any> {
 
   readonly shouldDefer?: boolean
   readonly alwaysLoad?: boolean
+
+  /**
+   * When set, tools can be registered but omitted from the API tool list / static tool instructions.
+   * Used for session-dependent tools (e.g. workflow phase control in manual mode).
+   */
+  shouldIncludeInApi?(ctx: { state: SessionState }): boolean
 
   isEnabled?(): boolean
   maxResultSizeChars?: number
@@ -315,6 +324,11 @@ export interface Settings {
     model?: string
     fallbackModel?: string
   }
+  /**
+   * 工作流阶段由谁 driving：`manual` 仅用户/UI/CLI 切换；`advisory` | `auto` 时主 Agent 可调用 WorkflowPhase 工具改阶段。
+   * `auto` 与 `advisory` 在实现上相同，仅在系统提示中强调自动推进的责任不同。
+   */
+  workflowManager?: { mode?: WorkflowManagerMode }
   /** Logger instance for structured logging */
   logger?: unknown
   /**
