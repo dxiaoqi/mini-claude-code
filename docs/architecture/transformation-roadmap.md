@@ -109,6 +109,8 @@
 
 **Web 项目侧栏（轻量）**：`GET /api/workspace`、`GET /api/workflow`、`GET /api/skills`；`POST /api/sessions/:id/refresh`；`POST /api/sessions/:id/workflow/phase`；`POST /api/sessions/:id/skill-design`（无工具 LLM）；`POST /api/sessions/:id/skill` 保存 `.md`。
 
+**项目工作流看板（规划）**：顶栏/条带 + 可选 Kanban 与 `.blino/board.json`；不默认占 LLM 上下文。详见 [project-workflow-board.md](./project-workflow-board.md)（P1 条带 → P2 看板与 API → P3+ 体验）。
+
 ---
 
 *文档可随实现更新； major 行为变更时同步更新本节「当前项目内容」。*
