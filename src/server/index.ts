@@ -16,6 +16,7 @@
  *   POST /api/init/skill-creator            — 将内置 skill-creator 写入 .blino/skills/
  *   GET  /api/workspace                     — 工作区路径与 .blino 根名
  *   GET  /api/workflow                      — 当前项目 workflow 摘要
+ *   GET  /api/sessions/:id/workflow         — 仅会话 workflow 摘要（无 messages，供轮询）
  *   GET  /api/skills                        — 技能文件列表
  *   POST /api/sessions/:id/refresh         — 重载磁盘配置并刷新技能缓存
  *   POST /api/sessions/:id/workflow/phase  — 切换阶段 (delta)
@@ -560,6 +561,31 @@ export function createBlinoServer(config: ServerConfig) {
       } catch (e) {
         json(res, { ok: false, error: (e as Error).message }, 400)
       }
+      return
+    }
+
+    // ── GET /api/sessions/:id/workflow  — 轻量，无 messages（UI 轮询用）──
+    const sessionWorkflowGet = path.match(/^\/api\/sessions\/([^/]+)\/workflow$/)
+    if (method === 'GET' && sessionWorkflowGet) {
+      const entry = sessions.get(sessionWorkflowGet[1])
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const policy = entry.state.settings.projectPolicy
+      const phaseCount = policy?.phases?.length || 0
+      const phases = policy?.phases?.map(p => ({
+        id: p.id,
+        notes: p.notes,
+        activateSkillPacks: p.activateSkillPacks,
+      })) ?? []
+      json(res, {
+        workflow: {
+          activePhaseId: entry.state.activePhaseId,
+          activePhaseIndex: entry.state.activePhaseIndex,
+          activeSkillPacks: entry.state.activeSkillPacks,
+          phaseCount,
+          profile: policy?.profile,
+          phases,
+        },
+      })
       return
     }
 

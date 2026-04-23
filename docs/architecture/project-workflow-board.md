@@ -123,13 +123,13 @@
 
 ## 七、实现阶段（可交付粒）
 
-### P1 — 工作流条带（MVP，推荐先交付）
+### P1 — 工作流条带（MVP，推荐先交付）— **已实现**
 
-- [ ] 后端：无需新文件；确认 `GET /api/sessions/:id` 的 `workflow` 字段前端正需要（已有则跳过）。
-- [ ] 前端：`WorkflowBar` 组件 + 嵌入 `page.tsx`（header 下方，可折叠）。
-- [ ] 数据：`useWorkflowBarState` — `useEffect` 轮询 `GET /api/workflow` + 有 session 时 `GET /api/sessions/:id` 合并显示当前步。
-- [ ] 操作：有 session 时 `POST .../workflow/phase` 与侧栏行为一致；无 session 时禁用。
-- [ ] 验收：切阶段后条带与「项目」内阶段数字同步；**无额外 token 变化**。
+- [x] 后端：`GET /api/sessions/:id/workflow` — 仅返回 `workflow` 摘要 + `phases` 元数据（**无 messages**），供轮询。
+- [x] 前端：`WorkflowBar`（`ui/src/components/WorkflowBar.tsx`）+ 嵌于 `page.tsx` header 下，可折叠。
+- [x] 数据：约 4s 轮询 `GET /api/workflow` + 有 session 时 `GET /api/sessions/:id/workflow`。
+- [x] 操作：有 session 且多阶段时 `POST .../workflow/phase`；无 session 时切换禁用；无 `workflow.json` 时条带内轻提示并可打开「项目」。
+- [ ] 验收：切阶段后条带与「项目」内阶段一致；**无 LLM 上下文变化**（纯 UI + 轻量 API）。
 
 ### P2 — `.blino/board.json` + 读写 API + 轻看板
 

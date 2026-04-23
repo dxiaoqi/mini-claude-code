@@ -16,6 +16,7 @@ import { PermissionDialog, type PermissionRequest } from '@/components/Permissio
 import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
 import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel'
+import { WorkflowBar } from '@/components/WorkflowBar'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
 
@@ -1156,6 +1157,12 @@ export default function HomePage() {
           />
         </div>
       </header>
+
+      <WorkflowBar
+        blinoUrl={BLINO_URL}
+        sessionId={activeSessionId}
+        onOpenProject={() => setProjectOpen(true)}
+      />
 
       {/* ── Messages ────────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
