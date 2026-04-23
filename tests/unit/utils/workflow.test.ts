@@ -49,6 +49,19 @@ describe('workflow policy', () => {
     expect(policy?.phases?.[0].id).toBe('p1')
   })
 
+  it('loadWorkflowPolicy accepts optional mermaid string', async () => {
+    const valid = {
+      schemaVersion: 1,
+      profile: 'g',
+      mermaid: 'flowchart TB\n  A --> B',
+      phases: [{ id: 'a' }, { id: 'b' }],
+    }
+    await writeFile(getWorkflowPath(dir), JSON.stringify(valid), 'utf-8')
+    const { policy, error } = await loadWorkflowPolicy(dir)
+    expect(error).toBeUndefined()
+    expect(policy?.mermaid).toContain('flowchart')
+  })
+
   it('loadWorkflowPolicy rejects invalid file with error', async () => {
     await writeFile(getWorkflowPath(dir), JSON.stringify({ schemaVersion: 'x' }), 'utf-8')
     const { policy, error } = await loadWorkflowPolicy(dir)

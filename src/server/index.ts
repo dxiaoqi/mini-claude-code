@@ -583,6 +583,7 @@ export function createBlinoServer(config: ServerConfig) {
           activeSkillPacks: entry.state.activeSkillPacks,
           phaseCount,
           profile: policy?.profile,
+          mermaid: policy?.mermaid,
           phases,
         },
       })

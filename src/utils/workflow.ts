@@ -33,6 +33,8 @@ const teamSchema = z.object({
 const workflowFileSchema = z.object({
   schemaVersion: z.number().int().positive(),
   profile: z.string().min(1).default('default'),
+  /** Optional Mermaid diagram source for UI (e.g. flowchart). If omitted, UI derives a simple LR flow from phases. */
+  mermaid: z.string().optional(),
   phases: z.array(phaseSchema).optional(),
   evaluation: z.array(evaluationSchema).optional(),
   team: teamSchema.optional(),

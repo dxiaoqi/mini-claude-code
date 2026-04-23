@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucide-react'
+import { WorkflowMermaidDiagram } from '@/components/WorkflowMermaidDiagram'
 
 type PhaseInfo = { id: string; notes?: string; activateSkillPacks?: string[] }
 
@@ -11,6 +12,7 @@ type WorkflowStatic = {
   policy: {
     profile?: string
     schemaVersion?: number
+    mermaid?: string
     phases?: PhaseInfo[]
   } | null
 }
@@ -21,6 +23,7 @@ type SessionWorkflow = {
   activeSkillPacks?: string[]
   phaseCount?: number
   profile?: string
+  mermaid?: string
   phases?: PhaseInfo[]
 }
 
@@ -105,6 +108,7 @@ export function WorkflowBar({
     ? sessionWf.phases
     : (policy?.phases && policy.phases.length > 0 ? policy.phases : [])
   const profile = sessionWf?.profile ?? policy?.profile
+  const mermaidCustom = sessionWf?.mermaid ?? policy?.mermaid
   const phaseCount = phases.length
   const idx = sessionWf?.activePhaseIndex ?? 0
   const cur = phaseCount > 0 ? phases[Math.min(Math.max(0, idx), phaseCount - 1)] : undefined
@@ -305,6 +309,13 @@ export function WorkflowBar({
             </p>
           )}
           {hint && <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)' }}>{hint}</p>}
+          {hasWorkflow && (
+            <WorkflowMermaidDiagram
+              customSource={mermaidCustom}
+              phases={phases}
+              activePhaseIndex={idx}
+            />
+          )}
         </div>
       )}
     </div>

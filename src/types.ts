@@ -275,6 +275,8 @@ export interface AgentHandle {
 export interface ProjectWorkflowPolicy {
   schemaVersion: number
   profile: string
+  /** Optional Mermaid source for workflow visualization in the Web UI */
+  mermaid?: string
   phases?: Array<{
     id: string
     notes?: string
