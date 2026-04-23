@@ -21,7 +21,7 @@
 ### 2.0 Mermaid 流程图（可选）
 
 - 在 **`.blino/workflow.json`** 根级可增加可选字段 **`mermaid`**（字符串）：合法 **Mermaid** 源码，由 **「项目」侧栏** 内 `ProjectWorkflowSection` 渲染（`mermaid` npm 包，`securityLevel: 'strict'`）。
-- **未写 `mermaid`** 时，UI 根据 **`phases`** 自动生成简易 **`flowchart LR`**（`P0 -> P1 -> ...`），当前阶段在标签前加 **`▶`** 以便区分。
+- **未写 `mermaid`** 时，UI 根据 **`phases`** 自动生成 **`flowchart LR`**，**stadium** 圆角节点；当前阶段在 SVG 中高亮，节点 **`title`（浏览器原生悬停）** 含 `notes` / `activateSkillPacks`；画布带浅网格、贴近 draw.io 阅读感。
 - 该字符串**不**注入 LLM `system` prompt；仅影响浏览器展示。
 
 ### 2.1 已有数据源（只读即可驱动「设计流」视图）

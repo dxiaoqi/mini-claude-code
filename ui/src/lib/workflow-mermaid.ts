@@ -1,22 +1,21 @@
 /**
- * Build a simple left-to-right flowchart from workflow phases for Mermaid.
- * Node ids are P0, P1, ... so we can highlight the active step with `class P{n} wfCurrent`.
+ * Build a simple left-to-right flowchart (draw.io–like: round stadium nodes, no ▶ in label — active state = SVG styling + tooltip).
+ * Node ids P0, P1... match post-process in WorkflowMermaidDiagram.
  */
 export function buildPhasesFlowchartMermaid(
   phases: Array<{ id: string }>,
-  activeIndex: number,
+  _activeIndex: number,
 ): string {
   if (!phases.length) return ''
   const n = phases.length
   const safe = (i: number) => {
     const raw = phases[i]?.id?.trim() || `step${i}`
-    return raw.replace(/"/g, "'").slice(0, 80)
+    return raw.replace(/"/g, "'").slice(0, 32)
   }
-  const ai = Math.min(Math.max(0, activeIndex), n - 1)
-  const lines: string[] = ['flowchart LR']
+  const lines: string[] = ['%% Blino auto: stadium nodes, tooltips in UI from phases', 'flowchart LR']
   for (let i = 0; i < n; i++) {
-    const label = i === ai ? `▶ ${safe(i)}` : safe(i)
-    lines.push(`  P${i}["${label}"]`)
+    // (label) = stadium / pill shape, closer to draw.io "rounded" blocks
+    lines.push(`  P${i}(${safe(i)})`)
   }
   for (let i = 0; i < n - 1; i++) {
     lines.push(`  P${i} --> P${i + 1}`)

@@ -34,6 +34,7 @@ export function SkillCreatorInstallOrView({
   panelOpen,
   fullWidth = true,
   compact = false,
+  shortLabel = false,
   onMessage,
   onAfterInstall,
 }: {
@@ -43,6 +44,8 @@ export function SkillCreatorInstallOrView({
   fullWidth?: boolean
   /** Smaller button padding for 项目 panel inline row. */
   compact?: boolean
+  /** Use shorter CTA for narrow / footer bars. */
+  shortLabel?: boolean
   onMessage?: (message: string | null) => void
   onAfterInstall?: () => void
 }) {
@@ -148,7 +151,8 @@ export function SkillCreatorInstallOrView({
               onClick={() => { void openBrowse() }}
               style={{ ...btnBase, width: fullWidth ? '100%' : 'auto' }}
             >
-              <Eye width={16} height={16} /> 查看 project 内 Skill / workflow
+              <Eye width={16} height={16} style={{ flexShrink: 0 }} />
+              {shortLabel ? '查看 Skill / 流程' : '查看 project 内 Skill / workflow'}
             </button>
           )
         : (
@@ -165,8 +169,8 @@ export function SkillCreatorInstallOrView({
                 opacity: initLoading ? 0.7 : 1,
               }}
             >
-              <Download width={14} height={14} style={{ display: 'inline' }} />
-              {initLoading ? '安装中…' : '安装 skill-creator'}
+              <Download width={14} height={14} style={{ display: 'inline', flexShrink: 0 }} />
+              {initLoading ? '…' : shortLabel ? '安装 creator' : '安装 skill-creator'}
             </button>
           )}
 

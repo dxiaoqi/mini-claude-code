@@ -172,7 +172,7 @@ export function ProjectSettingsPanel({
           </button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px 18px', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '16px 18px 20px', WebkitOverflowScrolling: 'touch' }}>
           {loading ? (
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>加载中…</p>
           ) : (
@@ -200,45 +200,111 @@ export function ProjectSettingsPanel({
               />
 
               <p style={labelStyle}>项目内技能文件</p>
-              <ul style={{ margin: '0 0 12px', paddingLeft: 16, maxHeight: 120, overflowY: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
+              <ul style={{ margin: '0 0 0', paddingLeft: 16, maxHeight: 160, overflowY: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
                 {skillFiles.length ? skillFiles.map(f => <li key={f}><code style={{ fontSize: 11 }}>{f}</code></li>) : <li>（无 .md）</li>}
               </ul>
               {skillNames.length > 0 && (
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>当前可加载的 skill 名：{skillNames.join(', ')}</p>
-              )}
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => { void doRefresh() }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', fontSize: 12, borderRadius: 8, border: '0.5px solid var(--border-default)', background: 'var(--bg-secondary)', cursor: 'pointer' }}
-                >
-                  <RefreshCw width={14} height={14} /> 重载与刷新
-                </button>
-                <div style={{ flex: '1 1 180px', minWidth: 140 }}>
-                  <SkillCreatorInstallOrView
-                    blinoUrl={blinoUrl}
-                    panelOpen={open}
-                    fullWidth
-                    compact
-                    onMessage={setMessage}
-                    onAfterInstall={() => { void loadAll() }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setCreateOpen(true); setDesignHistory([]); setProposed(null); setDesignInput('') }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', fontSize: 12, borderRadius: 8, border: '0.5px solid var(--accent)', background: 'var(--accent)', color: '#fff', cursor: 'pointer' }}
-                >
-                  <Sparkles width={14} height={14} /> 创建 Skill
-                </button>
-              </div>
-
-              {message && (
-                <p style={{ fontSize: 12, color: message.startsWith('已') || message.includes('保存') ? 'var(--accent)' : 'var(--text-secondary)' }}>{message}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 10, marginBottom: 0 }}>当前可加载的 skill 名：{skillNames.join(', ')}</p>
               )}
             </>
           )}
+        </div>
+
+        <div
+          style={{
+            flexShrink: 0,
+            borderTop: '0.5px solid var(--border-default)',
+            background: 'var(--bg-secondary)',
+            padding: '10px 16px 14px',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
+            paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+          }}
+        >
+          {message && (
+            <p
+              style={{
+                fontSize: 11,
+                lineHeight: 1.45,
+                margin: '0 0 10px',
+                color: message.startsWith('已') || message.includes('保存') ? 'var(--accent)' : 'var(--text-secondary)',
+              }}
+            >
+              {message}
+            </p>
+          )}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.4fr 1fr',
+              gap: 8,
+              alignItems: 'stretch',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => { void doRefresh() }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '9px 8px',
+                fontSize: 11,
+                fontWeight: 500,
+                borderRadius: 'var(--radius-md)',
+                border: '0.5px solid var(--border-default)',
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              <RefreshCw width={13} height={13} style={{ flexShrink: 0 }} />
+              <span className="project-footer-btn-label">重载</span>
+            </button>
+            <div style={{ minWidth: 0 }}>
+              <SkillCreatorInstallOrView
+                blinoUrl={blinoUrl}
+                panelOpen={open}
+                fullWidth
+                compact
+                shortLabel
+                onMessage={setMessage}
+                onAfterInstall={() => { void loadAll() }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => { setCreateOpen(true); setDesignHistory([]); setProposed(null); setDesignInput('') }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '9px 8px',
+                fontSize: 11,
+                fontWeight: 600,
+                borderRadius: 'var(--radius-md)',
+                border: '0.5px solid var(--accent)',
+                background: 'var(--accent)',
+                color: '#fff',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              <Sparkles width={13} height={13} style={{ flexShrink: 0 }} />
+              <span className="project-footer-btn-label">创建 Skill</span>
+            </button>
+          </div>
+          <style>{`
+            @media (max-width: 400px) {
+              .project-footer-btn-label { display: none; }
+            }
+          `}</style>
         </div>
       </aside>
 

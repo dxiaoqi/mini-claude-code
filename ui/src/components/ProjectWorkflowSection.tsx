@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ChevronLeft, ChevronRight, GitBranch, Loader2 } from 'lucide-react'
+import { isReasonableMermaidSource } from '@/lib/workflow-mermaid'
 import { WorkflowMermaidDiagram } from '@/components/WorkflowMermaidDiagram'
 
 type PhaseInfo = { id: string; notes?: string; activateSkillPacks?: string[] }
@@ -33,8 +34,7 @@ const sectionBox: CSSProperties = {
   border: '0.5px solid var(--border-default)',
   borderRadius: 'var(--radius-lg)',
   background: 'var(--bg-tertiary)',
-  marginBottom: 20,
-  boxShadow: '0 1px 0 var(--border-default)',
+  marginBottom: 12,
   overflow: 'hidden',
 }
 
@@ -149,9 +149,12 @@ export function ProjectWorkflowSection({
   const mermaidCustom = sessionWf?.mermaid ?? policy?.mermaid
   const phaseCount = phases.length
   const idx = sessionWf?.activePhaseIndex ?? 0
-  const cur = phaseCount > 0 ? phases[Math.min(Math.max(0, idx), phaseCount - 1)] : undefined
   const hasWorkflow = phaseCount > 0
   const navDisabled = !sessionId || phaseCount < 2
+  const mermaidIsAuto = useMemo(
+    () => !mermaidCustom || !isReasonableMermaidSource(mermaidCustom),
+    [mermaidCustom],
+  )
 
   const shiftPhase = async (delta: 1 | -1) => {
     if (!sessionId) {
@@ -301,7 +304,7 @@ export function ProjectWorkflowSection({
         )}
       </div>
 
-      <div style={{ padding: '14px 16px 16px' }}>
+      <div style={{ padding: '12px 16px' }}>
         {staticWf?.error && (
           <p style={{
             fontSize: 12,
@@ -319,73 +322,14 @@ export function ProjectWorkflowSection({
         )}
 
         {hasWorkflow && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-              marginBottom: 14,
-              alignItems: 'center',
-            }}
-          >
-            {phases.map((p, i) => {
-              const active = i === idx
-              return (
-                <span
-                  key={`${p.id}-${i}`}
-                  title={p.notes || p.id}
-                  style={{
-                    fontSize: 12,
-                    padding: '5px 11px',
-                    borderRadius: 'var(--radius-full)',
-                    border: `0.5px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
-                    background: active ? 'var(--accent-bg)' : 'var(--bg-input)',
-                    color: active ? 'var(--accent)' : 'var(--text-tertiary)',
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: active ? 500 : 400,
-                    transition: 'background var(--duration-fast) var(--ease-smooth), color var(--duration-fast) var(--ease-smooth), border-color var(--duration-fast) var(--ease-smooth)',
-                  }}
-                >
-                  {i + 1}. {p.id}
-                </span>
-              )
-            })}
-          </div>
-        )}
-
-        {hasWorkflow && cur && (
-          <div
-            style={{
-              fontSize: 13,
-              color: 'var(--text-secondary)',
-              margin: '0 0 12px',
-              lineHeight: 1.6,
-              wordBreak: 'break-word',
-              padding: '10px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-secondary)',
-              border: '0.5px solid var(--border-default)',
-            }}
-          >
-            <span style={{ color: 'var(--text-tertiary)', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>当前阶段</span>
-            <div style={{ marginTop: 4 }}>
-              <code style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{cur.id}</code>
-              {cur.notes ? <span> — {cur.notes}</span> : null}
-            </div>
-            {sessionWf?.activeSkillPacks && sessionWf.activeSkillPacks.length > 0 && (
-              <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                技能包{' '}
-                {sessionWf.activeSkillPacks.map(p => (
-                  <code
-                    key={p}
-                    style={{ fontSize: 11, fontFamily: 'var(--font-mono)', marginRight: 6, color: 'var(--text-secondary)' }}
-                  >
-                    {p}
-                  </code>
-                ))}
-              </p>
-            )}
-          </div>
+          <details style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.55 }}>
+            <summary style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' as const }}>
+              为什么需要手动切换阶段？
+            </summary>
+            <p style={{ margin: '8px 0 0' }}>
+              各阶段在 <code style={{ fontSize: 10 }}>workflow.json</code> 中定义，会决定**当前**加载哪几个 skill 包。Agent 无法仅凭对话就可靠地判断你处于业务流程的哪一步，所以由你通过 ← / →（或终端 <code style={{ fontSize: 10 }}>/phase</code>）显式切换。悬停流程图节点可查看该阶段的说明与包。
+            </p>
+          </details>
         )}
 
         {hint && (
@@ -395,30 +339,30 @@ export function ProjectWorkflowSection({
         )}
 
         {hasWorkflow && (
-          <div>
-            <p style={{ ...labelCaps, marginBottom: 8 }}>流程图</p>
-            <div
-              style={{
-                maxHeight: 'min(50vh, 480px)',
-                minHeight: 80,
-                overflow: 'auto',
-                borderRadius: 'var(--radius-md)',
-                border: '0.5px solid var(--border-default)',
-                background: 'var(--bg-primary)',
-                padding: 14,
-                WebkitOverflowScrolling: 'touch',
-              }}
-            >
-              <WorkflowMermaidDiagram
-                customSource={mermaidCustom}
-                phases={phases}
-                activePhaseIndex={idx}
-              />
-            </div>
-            <p style={{ fontSize: 10, color: 'var(--text-tertiary)', margin: '10px 0 0', lineHeight: 1.5 }}>
-              在 <code style={{ fontSize: 10 }}>workflow.json</code> 根级填写 <code style={{ fontSize: 10 }}>mermaid</code> 可完全自定义；未填则按阶段自动生成。宽图可在此区域内横向滚动。
-            </p>
+          <div
+            style={{
+              maxHeight: 'min(48vh, 420px)',
+              minHeight: 64,
+              overflow: 'auto',
+              borderRadius: 'var(--radius-md)',
+              border: '0.5px solid var(--border-default)',
+              background: 'var(--bg-primary)',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            <WorkflowMermaidDiagram
+              customSource={mermaidCustom}
+              phases={phases}
+              activePhaseIndex={idx}
+              isAuto={mermaidIsAuto}
+            />
           </div>
+        )}
+
+        {hasWorkflow && (
+          <p style={{ fontSize: 10, color: 'var(--text-tertiary)', margin: '8px 0 0', lineHeight: 1.45 }}>
+            高亮 = 当前阶段。根字段 <code style={{ fontSize: 9 }}>mermaid</code> 可写任意图。宽图在框内滚动。
+          </p>
         )}
       </div>
     </div>

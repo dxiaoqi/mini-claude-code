@@ -21,20 +21,23 @@ function useDocumentTheme(): 'light' | 'dark' {
   return t
 }
 
-type PhaseLite = { id: string }
+export type PhaseForDiagram = { id: string; notes?: string; activateSkillPacks?: string[] }
 
 /**
- * Renders workflow as Mermaid: uses `customSource` from workflow.json when set and valid,
- * otherwise a simple LR flowchart from `phases` with the active step prefixed with ▶.
+ * Mermaid with draw.io–like canvas (subtle grid), round nodes, link styling, and
+ * post-render: native SVG &lt;title&gt; tooltips + active node highlight (no long labels on nodes).
  */
 export function WorkflowMermaidDiagram({
   customSource,
   phases,
   activePhaseIndex,
+  isAuto,
 }: {
   customSource?: string | null
-  phases: PhaseLite[]
+  phases: PhaseForDiagram[]
   activePhaseIndex: number
+  /** True when definition is from buildPhasesFlowchartMermaid (we can add tooltips by node index). */
+  isAuto: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const uid = useId().replace(/:/g, '')
@@ -59,34 +62,65 @@ export function WorkflowMermaidDiagram({
     void (async () => {
       try {
         const mermaid = (await import('mermaid')).default
-        // Align Mermaid with globals.css (terracotta accent, paper backgrounds)
         const lightVars = {
-          primaryColor: '#F5E9E2',
+          primaryColor: '#F0EEE6',
           primaryTextColor: '#3D3929',
-          primaryBorderColor: '#C96442',
+          primaryBorderColor: 'rgba(61, 57, 41, 0.22)',
           lineColor: '#B4B2A7',
-          secondaryColor: '#F0EEE6',
-          tertiaryColor: '#FAF9F5',
+          secondaryColor: '#FAF9F5',
+          tertiaryColor: '#FFFFFF',
         }
         const darkVars = {
-          primaryColor: '#3D2A22',
+          primaryColor: '#2A2928',
           primaryTextColor: '#F5F4EE',
-          primaryBorderColor: '#D97757',
-          lineColor: '#83827D',
+          primaryBorderColor: 'rgba(245, 244, 238, 0.18)',
+          lineColor: '#6E6C68',
           secondaryColor: '#1F1E1D',
-          tertiaryColor: '#262624',
+          tertiaryColor: '#30302E',
         }
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
           theme: 'base',
           themeVariables: docTheme === 'light' ? lightVars : darkVars,
+          flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            nodeSpacing: 52,
+            rankSpacing: 48,
+            curve: 'basis',
+            padding: 12,
+          },
         })
         const graphId = `wfgraph-${uid}`
-        const { svg } = await mermaid.render(graphId, definition)
-        if (!cancelled && el) {
-          el.innerHTML = svg
-          setError(null)
+        const { svg: svgString } = await mermaid.render(graphId, definition)
+        if (cancelled || !el) return
+        el.innerHTML = svgString
+        setError(null)
+
+        const svg = el.querySelector('svg')
+        if (svg) {
+          svg.setAttribute('role', 'img')
+          if (isAuto && phases.length > 0) {
+            const nodes = Array.from(svg.querySelectorAll<SVGGElement>('g.node'))
+            nodes.forEach((g, i) => {
+              g.classList.remove('wf-mermaid--active')
+              if (i >= phases.length) return
+              const p = phases[i]!
+              const text = [p.id]
+              if (p.notes) text.push(p.notes)
+              if (p.activateSkillPacks?.length) text.push(`Packs: ${p.activateSkillPacks.join(', ')}`)
+              if (i === activePhaseIndex) text.push('当前阶段')
+              const t = g.querySelector('title')
+              if (t) t.textContent = text.join('\n')
+              else {
+                const nt = document.createElementNS('http://www.w3.org/2000/svg', 'title')
+                nt.textContent = text.join('\n')
+                g.insertBefore(nt, g.firstChild)
+              }
+              if (i === activePhaseIndex) g.classList.add('wf-mermaid--active')
+            })
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -99,21 +133,43 @@ export function WorkflowMermaidDiagram({
     return () => {
       cancelled = true
     }
-  }, [definition, uid, docTheme])
+  }, [definition, uid, docTheme, phases, activePhaseIndex, isAuto])
 
   if (!definition) return null
 
   return (
-    <div style={{ marginTop: 8, marginBottom: 4 }}>
+    <div
+      className="workflow-mermaid-canvas"
+      style={{
+        position: 'relative',
+        borderRadius: 'var(--radius-md)',
+        /* subtle grid, draw.io–like */
+        backgroundColor: 'var(--bg-secondary)',
+        backgroundImage: `
+          linear-gradient(var(--border-default) 0.5px, transparent 0.5px),
+          linear-gradient(90deg, var(--border-default) 0.5px, transparent 0.5px)
+        `,
+        backgroundSize: '20px 20px',
+        backgroundPosition: '0 0',
+        padding: 12,
+      }}
+    >
       <style>{`
-        .workflow-mermaid-root svg { max-width: 100%; height: auto; display: block; }
+        .workflow-mermaid-root { position: relative; }
+        .workflow-mermaid-root svg {
+          max-width: 100%;
+          height: auto;
+          display: block;
+        }
+        .workflow-mermaid-root g.wf-mermaid--active .nodeLabel { font-weight: 600; }
+        .workflow-mermaid-root g.wf-mermaid--active .cluster rect { stroke: var(--accent) !important; }
+        .workflow-mermaid-root .edgePath path { stroke-width: 1.75px !important; }
       `}</style>
       <div
         ref={containerRef}
         style={{
           overflow: 'auto',
           maxWidth: '100%',
-          fontSize: 12,
         }}
         className="workflow-mermaid-root"
       />
