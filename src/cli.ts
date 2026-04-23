@@ -383,7 +383,10 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     // ── 检查当前 workspace 是否已有实例在运行 ──
     const existingLock = await readServerLock(cwd)
     if (existingLock) {
-      const url = `http://${existingLock.host}:${existingLock.port}`
+      const { buildTuiBrowserUrl } = await import('./utils/tuiUrls.js')
+      const url = isTui
+        ? buildTuiBrowserUrl(existingLock.host, existingLock.port)
+        : `http://${existingLock.host}:${existingLock.port}`
       console.log(chalk.yellow(
         `⚡ blino server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
       ))
@@ -411,8 +414,33 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     }
 
     const uiPort = 3000
-    const corsOrigin = (options.corsOrigin as string) || process.env.CORS_ORIGIN
-      || (isTui ? `http://${host}:${uiPort}` : `http://${host}:3002`)
+    const manualCors = (options.corsOrigin as string) || process.env.CORS_ORIGIN
+    const {
+      buildTuiCorsOrigins,
+      buildTuiPublicApiBaseUrl,
+      buildTuiBrowserUrl,
+      isBindAll,
+    } = await import('./utils/tuiUrls.js')
+    const corsOrigin = manualCors
+      || (isTui ? buildTuiCorsOrigins(host, uiPort) : `http://${host}:3002`)
+    if (isTui) {
+      const tuiPublicApi = buildTuiPublicApiBaseUrl(host, port, process.env)
+      const fromEnv = [process.env.BLINO_PUBLIC_API_URL, process.env.NEXT_PUBLIC_BLINO_URL]
+        .some(v => typeof v === 'string' && v.trim().length > 0)
+      const hostHint = manualCors
+        ? '--cors-origin / CORS_ORIGIN'
+        : isBindAll(host)
+          ? 'localhost, 127.0.0.1, LAN'
+          : (host === 'localhost' || host === '127.0.0.1')
+            ? 'localhost, 127.0.0.1'
+            : `localhost, 127.0.0.1, ${host}`
+      console.log(
+        chalk.dim(
+          `${manualCors ? 'CORS: override' : 'CORS: auto'} — ${hostHint} (UI :${uiPort})` +
+            ` | API base for UI: ${tuiPublicApi}${fromEnv ? ' (from BLINO_PUBLIC_API_URL / NEXT_PUBLIC_BLINO_URL)' : (isBindAll(host) ? ' (set BLINO_PUBLIC_API_URL for public URL)' : '')}`,
+        ),
+      )
+    }
 
     // 静态文件目录
     const { resolve: resolvePath } = await import('node:path')
@@ -466,6 +494,20 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       const forceStandalone = process.env.BLINO_UI_STANDALONE === '1'
       const useStandaloneUi = es2(standaloneServer) && (forceStandalone || !hasUiSource)
 
+      const publicApi = buildTuiPublicApiBaseUrl(host, port)
+      /** Next `next dev` must bind a concrete host; 0.0.0.0/:: is not valid in the browser. */
+      const nextHostname = isBindAll(host) ? '127.0.0.1' : (host || '127.0.0.1')
+      const uiEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        PORT: String(uiPort),
+        HOSTNAME: nextHostname,
+        BLINO_API_URL: publicApi,
+        NEXT_PUBLIC_BLINO_URL: publicApi,
+      }
+      if (isBindAll(host) && (nextHostname === '127.0.0.1' || nextHostname === 'localhost')) {
+        uiEnv.HOST = nextHostname
+      }
+
       let uiProc: ReturnType<typeof spawn>
 
       if (useStandaloneUi) {
@@ -474,13 +516,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         uiProc = spawn(process.execPath, [standaloneServer], {
           cwd: pkgRoot,
           stdio: 'inherit',
-          env: {
-            ...process.env,
-            PORT: String(uiPort),
-            HOSTNAME: host,
-            // Pass the actual backend URL so the standalone server can relay it
-            BLINO_API_URL: `http://${host}:${port}`,
-          },
+          env: uiEnv,
         })
       } else {
         // ── Development: Next.js dev server ───────────────────────────────
@@ -488,10 +524,11 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         if (hasUiSource) {
           console.log(chalk.dim('   (using ui/src — run npm run build:web before publish; BLINO_UI_STANDALONE=1 to force bundled UI)'))
         }
-        uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
+        uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort), '-H', nextHostname], {
           cwd: uiDir,
           stdio: 'inherit',
           shell: true,
+          env: uiEnv,
         })
       }
 
@@ -502,7 +539,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       process.on('exit', () => { try { uiProc.kill() } catch { /* ignore */ } })
 
       // Wait for UI to be ready, then open browser
-      const uiUrl = `http://${host}:${uiPort}`
+      const uiUrl = buildTuiBrowserUrl(host, uiPort)
       const warmUpMs = useStandaloneUi ? 2000 : 4000
       setTimeout(async () => {
         console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
