@@ -10,13 +10,13 @@
 
 | 区域 | 现状 |
 |------|------|
-| 用户/项目配置 | 目标为 **`~/.blino/settings.json`、`<project>/.blino/settings.json`、`<project>/.blino/settings.local.json`**（见 [`blino-directory-layout.md`](./blino-directory-layout.md)）；当前实现仍为 `.mini-claude` 直至迁移落地；合并逻辑见 `src/utils/config.ts` |
+| 用户/项目配置 | **`~/.blino/settings.json`、`<project>/.blino/settings.json`、`<project>/.blino/settings.local.json`**（见 [`blino-directory-layout.md`](./blino-directory-layout.md)）；合并逻辑见 `src/utils/config.ts` |
 | 类型 | `Settings` 等集中在 `src/types.ts` |
 | 技能 | `src/context/skills.ts`、`SkillTool`；`ui/skill-pack` 为前端包 |
 | 多角色 | 已有 `coordinator` 相关模块（`src/engine/coordinator/`） |
 | 循环与工具 | `AgentEngine` / `agentLoop`、权限引擎 |
 
-**目录与配置根**：**只认 `.blino`** 作为项目/用户配置树（详见 [`blino-directory-layout.md`](./blino-directory-layout.md)）。**策略/流程** 单独文件，建议 **`<project>/.blino/workflow.json`**，不塞入巨型 `settings.json`；合并结果在进程内 `ResolvedConfig` 中完成。旧路径 **`.mini-claude` 的迁移/双读** 在实现中按该文档处理，非本文件重复定义。
+**目录与配置根**：**只认 `.blino`**（详见 [`blino-directory-layout.md`](./blino-directory-layout.md)）。**策略/流程** 单独文件，建议 **`<project>/.blino/workflow.json`**，不塞入巨型 `settings.json`；合并结果在进程内 `ResolvedConfig` 中完成。
 
 ---
 

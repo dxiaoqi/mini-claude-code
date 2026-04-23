@@ -575,7 +575,7 @@ export default function Page() {
                       lineHeight: 1.2,
                     }}
                   >
-                    mini-claude
+                    Blino
                   </h1>
                   <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 28px', lineHeight: 1.6, maxWidth: 400 }}>
                     Files, commands, and edits — wired to your repo. Pick a prompt or type below.

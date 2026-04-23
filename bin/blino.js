@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * mini-claude — global CLI entry point
- * 
+ * blino — global CLI entry point
+ *
  * Dev mode:  runs tsx src/cli.ts (auto-detected when dist/ doesn't exist)
  * Prod mode: runs dist/cli.js (after npm run build)
  */
@@ -20,7 +20,6 @@ const srcCli = resolve(root, 'src', 'cli.ts')
 const args = process.argv.slice(2)
 
 if (existsSync(distCli)) {
-  // Production: use compiled JS
   const child = spawn(process.execPath, [distCli, ...args], {
     stdio: 'inherit',
     cwd: process.cwd(),
@@ -28,10 +27,9 @@ if (existsSync(distCli)) {
   })
   child.on('exit', code => process.exit(code ?? 0))
 } else {
-  // Development: use tsx
   const tsxBin = resolve(root, 'node_modules', '.bin', 'tsx')
   const runner = existsSync(tsxBin) ? tsxBin : 'tsx'
-  
+
   const child = spawn(runner, [srcCli, ...args], {
     stdio: 'inherit',
     cwd: process.cwd(),

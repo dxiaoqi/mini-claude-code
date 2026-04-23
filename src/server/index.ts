@@ -1,7 +1,7 @@
 /**
  * server/index.ts — HTTP Server 主入口
  *
- * 将 mini-claude-code 暴露为 HTTP 服务，供 Next.js 前端调用。
+ * 将 Blino 暴露为 HTTP 服务，供 Next.js 前端调用。
  * 每个 session 持有独立的 AgentEngine 实例和 SSEAdapter。
  *
  * API 路由：
@@ -432,7 +432,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
     start(): Promise<void> {
       return new Promise((resolve) => {
         server.listen(config.port, config.host, () => {
-          console.log(`\n🌐 mini-claude-code server running at http://${config.host}:${config.port}`)
+          console.log(`\n🌐 blino server running at http://${config.host}:${config.port}`)
           resolve()
         })
       })

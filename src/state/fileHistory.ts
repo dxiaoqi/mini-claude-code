@@ -6,6 +6,7 @@
 import { readFile, writeFile, mkdir, stat, readdir, rm } from 'node:fs/promises'
 import { resolve, dirname, basename } from 'node:path'
 import type { SessionState } from '../types.js'
+import { BLINO_DIR } from '../utils/paths.js'
 
 interface FileSnapshot {
   filePath: string
@@ -21,7 +22,7 @@ const snapshots: Map<string, FileSnapshot[]> = new Map()
  */
 function getSnapshotDir(state: SessionState): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(homeDir, '.mini-claude', 'snapshots', state.sessionId)
+  return resolve(homeDir, BLINO_DIR, 'snapshots', state.sessionId)
 }
 
 /**

@@ -71,7 +71,7 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
               Config
             </div>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-geist-mono)', color: 'var(--text-3)', marginTop: 1 }}>
-              .mini-claude/settings.local.json
+              .blino/settings.local.json
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>

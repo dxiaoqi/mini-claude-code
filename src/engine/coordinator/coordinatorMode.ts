@@ -53,7 +53,7 @@ export async function* runCoordinatorMode(
   config: CoordinatorConfig,
 ): AsyncGenerator<StreamEvent, AgentLoopResult> {
   // Create scratchpad directory for cross-worker communication
-  const scratchpadDir = await mkdtemp(join(tmpdir(), 'mini-claude-scratchpad-'))
+  const scratchpadDir = await mkdtemp(join(tmpdir(), 'blino-scratchpad-'))
 
   // Build coordinator-specific system prompt
   const coordinatorSystemPrompt = getCoordinatorSystemPrompt()

@@ -17,7 +17,7 @@ export class NetworkError extends MiniClaudeError {
     if (statusCode === 401) {
       suggestedActions.push({
         title: 'Check API Key',
-        description: 'Verify your API key is correct in ~/.mini-claude/settings.json',
+        description: 'Verify your API key is correct in ~/.blino/settings.json',
       })
     } else if (statusCode === 429) {
       suggestedActions.push({

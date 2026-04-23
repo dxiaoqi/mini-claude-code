@@ -96,7 +96,7 @@ export default function ConfigPanel({ onClose }: Props) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Workspace Config</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-            .mini-claude/settings.local.json
+            .blino/settings.local.json
           </div>
         </div>
         <button

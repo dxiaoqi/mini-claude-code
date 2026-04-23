@@ -7,6 +7,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { MCPServerConfig } from '../types.js'
+import { BLINO_DIR } from '../utils/paths.js'
 
 interface MCPConfigFile {
   mcpServers?: Record<string, MCPServerConfigRaw>
@@ -22,9 +23,9 @@ interface MCPServerConfigRaw {
 
 /**
  * Load and merge MCP configs from three levels:
- *   1. User-level:   ~/.mini-claude/settings.json
- *   2. Project-level: .mini-claude/settings.json
- *   3. Local-level:   .mini-claude/settings.local.json (not committed)
+ *   1. User-level:   ~/.blino/settings.json
+ *   2. Project-level: .blino/settings.json
+ *   3. Local-level:   .blino/settings.local.json (not committed)
  *
  * Later levels override earlier ones (local > project > user).
  */
@@ -34,9 +35,9 @@ export async function loadMCPConfigs(
   const homeDir = process.env.HOME || process.env.USERPROFILE || ''
 
   const configPaths = [
-    homeDir ? resolve(homeDir, '.mini-claude', 'settings.json') : null,
-    resolve(projectRoot, '.mini-claude', 'settings.json'),
-    resolve(projectRoot, '.mini-claude', 'settings.local.json'),
+    homeDir ? resolve(homeDir, BLINO_DIR, 'settings.json') : null,
+    resolve(projectRoot, BLINO_DIR, 'settings.json'),
+    resolve(projectRoot, BLINO_DIR, 'settings.local.json'),
   ].filter(Boolean) as string[]
 
   const merged: Record<string, MCPServerConfigRaw> = {}

@@ -1,6 +1,6 @@
-# Mini Claude Code - Agent Ability Tests
+# Blino — Agent Ability Tests
 
-Test suite to evaluate and validate the capabilities of the mini-claude-code agent.
+Test suite to evaluate and validate the capabilities of the Blino agent.
 
 ## Agent Loop 能力评估 (Agent Loop Capability Evaluation)
 

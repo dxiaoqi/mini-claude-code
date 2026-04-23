@@ -1,11 +1,12 @@
 /**
  * Skill 加载器 — Skill 加载器（YAML frontmatter 解析）
  *
- * 从用户与项目目录下的 .mini-claude/skills 加载 Markdown 技能文件，解析 YAML
+ * 从用户与项目目录下的 .blino/skills 加载 Markdown 技能文件，解析 YAML
  * frontmatter（name、description、allowedTools）与正文 prompt，合并为 SkillDefinition 列表。
  */
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
+import { BLINO_DIR } from '../utils/paths.js'
 
 export interface SkillDefinition {
   name: string
@@ -17,7 +18,7 @@ export interface SkillDefinition {
 }
 
 /**
- * Load skills from .mini-claude/skills/ directories.
+ * Load skills from .blino/skills/ directories.
  * Skills are Markdown files with YAML frontmatter.
  *
  * Example:
@@ -36,13 +37,13 @@ export async function loadSkills(projectRoot: string): Promise<SkillDefinition[]
 
   // User-level skills
   if (homeDir) {
-    const userSkillsDir = resolve(homeDir, '.mini-claude', 'skills')
+    const userSkillsDir = resolve(homeDir, BLINO_DIR, 'skills')
     const userSkills = await loadSkillsFromDir(userSkillsDir, 'user')
     skills.push(...userSkills)
   }
 
   // Project-level skills
-  const projectSkillsDir = resolve(projectRoot, '.mini-claude', 'skills')
+  const projectSkillsDir = resolve(projectRoot, BLINO_DIR, 'skills')
   const projectSkills = await loadSkillsFromDir(projectSkillsDir, 'project')
   skills.push(...projectSkills)
 

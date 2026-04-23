@@ -1,7 +1,7 @@
 /**
  * SkillTool — 自定义 Skill 工作流执行工具
  *
- * 加载项目内（如 `.mini-claude/skills/`）定义的 Skill，将对应工作流说明注入对话供模型遵循。
+ * 加载项目内（如 `.blino/skills/`）定义的 Skill，将对应工作流说明注入对话供模型遵循。
  */
 import { z } from 'zod'
 import type { PermissionResult, Tool, ToolResult } from '../../types.js'
@@ -25,7 +25,7 @@ let cachedSkills: SkillDefinition[] | null = null
 export const SkillTool: Tool<Input, Output> = {
   name: 'Skill',
   aliases: ['SkillTool'],
-  description: 'Execute a project-defined skill (workflow). Skills are Markdown prompt files in .mini-claude/skills/. Use SkillTool to discover and run them.',
+  description: 'Execute a project-defined skill (workflow). Skills are Markdown prompt files in .blino/skills/. Use SkillTool to discover and run them.',
 
   inputSchema,
   alwaysLoad: true,
@@ -49,7 +49,7 @@ export const SkillTool: Tool<Input, Output> = {
         return {
           data: {
             skillName: 'list',
-            prompt: 'No skills found. Create .md files in .mini-claude/skills/ to define skills.',
+            prompt: 'No skills found. Create .md files in .blino/skills/ to define skills.',
             found: false,
           },
         }

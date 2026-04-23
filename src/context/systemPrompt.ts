@@ -108,7 +108,7 @@ function getToolUseSection(enabledToolNames: string[]): string {
       ? `Use Agent for parallelizable subtasks or to protect the main context from excessive results. Don't duplicate work that agents are already doing.`
       : null,
     enabledToolNames.includes('Skill')
-      ? `Use the Skill tool to execute project-defined workflows from .mini-claude/skills/.`
+      ? `Use the Skill tool to execute project-defined workflows from .blino/skills/.`
       : null,
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`

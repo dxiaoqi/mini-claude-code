@@ -1,5 +1,5 @@
 /**
- * lib/api.ts — mini-claude-code HTTP API 客户端
+ * lib/api.ts — Blino HTTP API 客户端
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
