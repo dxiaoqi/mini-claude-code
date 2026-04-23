@@ -59,10 +59,28 @@ export function WorkflowMermaidDiagram({
     void (async () => {
       try {
         const mermaid = (await import('mermaid')).default
+        // Align Mermaid with globals.css (terracotta accent, paper backgrounds)
+        const lightVars = {
+          primaryColor: '#F5E9E2',
+          primaryTextColor: '#3D3929',
+          primaryBorderColor: '#C96442',
+          lineColor: '#B4B2A7',
+          secondaryColor: '#F0EEE6',
+          tertiaryColor: '#FAF9F5',
+        }
+        const darkVars = {
+          primaryColor: '#3D2A22',
+          primaryTextColor: '#F5F4EE',
+          primaryBorderColor: '#D97757',
+          lineColor: '#83827D',
+          secondaryColor: '#1F1E1D',
+          tertiaryColor: '#262624',
+        }
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
-          theme: docTheme === 'light' ? 'default' : 'dark',
+          theme: 'base',
+          themeVariables: docTheme === 'light' ? lightVars : darkVars,
         })
         const graphId = `wfgraph-${uid}`
         const { svg } = await mermaid.render(graphId, definition)
