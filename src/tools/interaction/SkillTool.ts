@@ -5,7 +5,7 @@
  */
 import { z } from 'zod'
 import type { PermissionResult, Tool, ToolResult } from '../../types.js'
-import { loadSkills, type SkillDefinition } from '../../context/skills.js'
+import { loadSkills, type SkillDefinition, type LoadSkillsOptions } from '../../context/skills.js'
 
 const inputSchema = z.object({
   skill: z.string().describe('The name of the skill to execute'),
@@ -20,7 +20,15 @@ interface Output {
   found: boolean
 }
 
-let cachedSkills: SkillDefinition[] | null = null
+const sessionSkillCache = new Map<string, SkillDefinition[] | null>()
+
+function getLoadOptions(state: { activeSkillPacks?: string[] }): LoadSkillsOptions {
+  const packs = state.activeSkillPacks
+  if (packs && packs.length > 0) {
+    return { includeUser: false, activateSkillPacks: packs }
+  }
+  return { includeUser: true }
+}
 
 export const SkillTool: Tool<Input, Output> = {
   name: 'Skill',
@@ -38,9 +46,12 @@ export const SkillTool: Tool<Input, Output> = {
   },
 
   async call(input, context): Promise<ToolResult<Output>> {
-    // Load or refresh skills cache
-    if (!cachedSkills) {
-      cachedSkills = await loadSkills(context.sessionState.projectRoot)
+    const sid = context.sessionState.sessionId
+    let cachedSkills = sessionSkillCache.get(sid) ?? null
+    if (cachedSkills === null) {
+      const opts = getLoadOptions(context.sessionState)
+      cachedSkills = await loadSkills(context.sessionState.projectRoot, opts)
+      sessionSkillCache.set(sid, cachedSkills)
     }
 
     // Special: list skills
@@ -49,7 +60,7 @@ export const SkillTool: Tool<Input, Output> = {
         return {
           data: {
             skillName: 'list',
-            prompt: 'No skills found. Create .md files in .blino/skills/ to define skills.',
+            prompt: 'No skills found. Add .md under .blino/skills/ or under packs listed in .blino/workflow.json (activateSkillPacks).',
             found: false,
           },
         }
@@ -114,6 +125,10 @@ export const SkillTool: Tool<Input, Output> = {
 /**
  * Invalidate the skill cache (call when /clear or when skills directory changes).
  */
-export function invalidateSkillCache(): void {
-  cachedSkills = null
+export function invalidateSkillCache(sessionId?: string): void {
+  if (sessionId) {
+    sessionSkillCache.delete(sessionId)
+  } else {
+    sessionSkillCache.clear()
+  }
 }

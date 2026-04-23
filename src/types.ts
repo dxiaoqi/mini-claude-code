@@ -373,6 +373,19 @@ export interface SessionState {
   model: string
   fallbackModel?: string
   settings: Settings
+
+  /**
+   * 来自 `projectPolicy.phases`：当前阶段下标（由 workflowRuntime 维护）。
+   * 无 workflow 或无双阶段时可视为 0。
+   */
+  activePhaseIndex?: number
+  /** 当前阶段 id（与 `phases[activePhaseIndex].id` 一致） */
+  activePhaseId?: string
+  /**
+   * 当阶段配置了 `activateSkillPacks` 时，为当前要加载的 pack 名列表（相对 `skills/<pack>`）。
+   * 空或未设置表示不限制根目录下全部 .md + 子目录；非空时仅这些包下技能可见。
+   */
+  activeSkillPacks?: string[]
 }
 
 // ────────────────────────────────────────────

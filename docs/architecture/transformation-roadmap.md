@@ -29,14 +29,14 @@
 - `skills/`：项目/用户 skill markdown（`context/skills.ts`）
 - `artifacts/`：可视化块落盘（`src/server/index.ts`）
 
-**实现方式**：多处以字面量 `'.blino'` 拼接路径，**尚未**集中到单一常量模块（见下一节规划）。
+**实现方式**：`getBlinoDir()`（`src/utils/paths.ts`）集中根目录名。
 
 **UI/文案**：`ApiSettingsPanel`、`VisualRenderer` 等已写 `.blino`；与后端一致。
 
 ### 1.3 与旧命名的关系
 
 - 代码与文档中**未发现**仍使用 `.mini-claude` 或旧 CLI 名（本分支已迁完）。
-- **残留**：根目录 **`.gitignore`** 仍忽略 `.mini-claude/settings.local.json` 与过时注释，应与 `.blino` 对齐，避免新贡献者误会。
+- **`.gitignore`**：已忽略 `.blino/settings.local.json`。
 
 ### 1.4 已有架构文档
 
@@ -69,10 +69,19 @@
 
 ---
 
-### P2 与 Skill / 培训场景的衔接
+### P2 与 Skill / 工作流阶段 — **已实现**
 
-- `phases` 中若包含「启用某类 skill 包或目录」，与现有 `loadSkills` 的目录约定对齐，避免双套路径逻辑。
-- 职业培训/题库内容仍以 **`.blino/skills` 或独立 pack 目录** 为内容载体，策略文件只**引用**不复制大段正文。
+| 项 | 内容 |
+|----|------|
+| **Pack 路径** | `phases[].activateSkillPacks` 为**单级目录名**（如 `"day1"` → 仅加载 `.<blino>/skills/day1/**/*.md`）；多 pack 合并后按 skill `name` 去重。Pack 模式下项目侧 **不混** 根目录 `skills/*.md`；**不加载** `~/.blino/skills`（避免与阶段混用）。 |
+| **loadSkills** | 支持 `LoadSkillsOptions`：`includeUser`、`activateSkillPacks`。无 pack 时行为同前：根级 `.md` + 非递归（与旧版一致）。 |
+| **SessionState** | `activePhaseIndex`、`activePhaseId`、`activeSkillPacks`；`createSessionState` / `clearSession` 内调 `applyWorkflowRuntimeToState`。 |
+| **Runtime** | `src/utils/workflowRuntime.ts`：`applyWorkflowRuntimeToState`、`advanceWorkflowPhase`。 |
+| **SkillTool** | 按 `sessionId` 缓存；读 `loadSkills(root, { activateSkillPacks, includeUser:false })` 当 `activeSkillPacks` 非空。 |
+| **System prompt** | 有 `projectPolicy` 时注入 **Project workflow** 段（profile、当前阶段、限定的 pack）。 |
+| **CLI** | `/phase`、`/phase next`、`/phase prev` 切换阶段并清空 prompt section cache + skill 缓存。 |
+
+**单测**：`tests/unit/utils/workflowRuntime.test.ts`、`tests/unit/context/skills-packs.test.ts`。
 
 ---
 
@@ -92,9 +101,9 @@
 
 ## 四、建议执行顺序
 
-1. **P0**（1 个 PR）：`paths.ts` + `.gitignore` + 全仓替换 `'.blino'` 引用点。  
-2. **P1**（1～2 个 PR）：`workflow.json` 结构、loader、合并点、最小穿线。  
-3. **P2 / P3**：按产品优先级排期。
+1. **P0–P1**：已合入。  
+2. **P2**：已合入（本段）。  
+3. **P3**：按产品优先级排期。
 
 ---
 

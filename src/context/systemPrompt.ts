@@ -108,7 +108,7 @@ function getToolUseSection(enabledToolNames: string[]): string {
       ? `Use Agent for parallelizable subtasks or to protect the main context from excessive results. Don't duplicate work that agents are already doing.`
       : null,
     enabledToolNames.includes('Skill')
-      ? `Use the Skill tool to execute project-defined workflows from .blino/skills/.`
+      ? `Use the Skill tool to execute project-defined workflows from .blino/skills/ (or from subfolders when the project workflow limits visible skills to specific packs).`
       : null,
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`
@@ -139,6 +139,36 @@ function getToneSection(): string {
 - Do not use emojis unless the user explicitly requests them.
 - When referencing code, include file_path:line_number for easy navigation.
 - Do not use a colon before tool calls. Text like "Let me read the file:" should be "Let me read the file." with a period.`
+}
+
+function getWorkflowSection(state: SessionState): string | null {
+  const pol = state.settings.projectPolicy
+  if (!pol) return null
+
+  const lines: string[] = [
+    '# Project workflow',
+    '',
+    `- **Profile**: \`${pol.profile}\` (workflow schema v${pol.schemaVersion})`,
+  ]
+
+  const phases = pol.phases
+  if (phases?.length) {
+    const idx = state.activePhaseIndex ?? 0
+    const cur = phases[idx]
+    lines.push(
+      `- **Current phase** (${idx + 1}/${phases.length}): \`${cur.id}\`${cur.notes ? ` — ${cur.notes}` : ''}`,
+    )
+    if (cur.activateSkillPacks?.length) {
+      lines.push(`- **Skill packs** (Skill tool limited to): ${cur.activateSkillPacks.map(p => `\`${p}\``).join(', ')}`)
+    }
+  }
+
+  lines.push(
+    '',
+    'To change phase in the terminal, use `/phase next` or `/phase prev` when workflow.json defines multiple phases.',
+  )
+
+  return lines.join('\n')
 }
 
 // ──────────────────────────────────────────────
@@ -195,6 +225,11 @@ export async function buildSystemPrompt(
   // UI 注入的额外内容（Artifacts 模式注入 visual-protocol 等）
   if (state.settings.systemPromptAddendum) {
     staticParts.push(`\n---\n${state.settings.systemPromptAddendum}`)
+  }
+
+  const workflowBlock = getWorkflowSection(state)
+  if (workflowBlock) {
+    staticParts.push(workflowBlock)
   }
 
   blocks.push({

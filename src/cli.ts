@@ -25,6 +25,7 @@ import { ImageReadTool } from './tools/content/ImageReadTool.js'
 import { PDFReadTool } from './tools/content/PDFReadTool.js'
 import { createToolSearchTool } from './tools/ToolSearchTool.js'
 import { SkillTool, invalidateSkillCache } from './tools/interaction/SkillTool.js'
+import { advanceWorkflowPhase } from './utils/workflowRuntime.js'
 import { TodoWriteTool, clearTodos } from './tools/interaction/TodoWriteTool.js'
 import { AskUserTool } from './tools/interaction/AskUserTool.js'
 import { createAgentTool } from './tools/agent/AgentTool.js'
@@ -693,7 +694,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       clearSession(state)
       clearSnapshots()
       clearSnipArchive()
-      invalidateSkillCache()
+      invalidateSkillCache(state.sessionId)
       clearTodos()
       console.log(chalk.dim('[Session cleared]'))
       continue
@@ -744,6 +745,18 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       continue
     }
 
+    if (userInput === '/phase' || userInput === '/phase next' || userInput === '/phase prev') {
+      const which = userInput.trim() === '/phase' ? 'next' : userInput.split(/\s+/)[1] || 'next'
+      const delta = which === 'prev' ? -1 : 1
+      const r = advanceWorkflowPhase(state, delta)
+      console.log(r.ok ? chalk.green(r.message) : chalk.yellow(r.message))
+      if (r.ok) {
+        state.systemPromptSectionCache.clear()
+        invalidateSkillCache(state.sessionId)
+      }
+      continue
+    }
+
     if (userInput === '/status') {
       // 优先使用 totalCostUSD（由 accumulateUsage 精确累加），
       // 仅当为 0 时用 estimateCost 兜底（首次 /status 且还未调用工具）
@@ -773,6 +786,8 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         ['/plan',                   '进入只读 Plan Mode（写操作被拒绝）'],
         ['/plan off',               '退出 Plan Mode'],
         ['/status',                 '查看当前会话状态（token / 成本 / 模型）'],
+        ['/phase', '/phase next',   'workflow 多阶段时切换到下一阶段（.blino/workflow.json）'],
+        ['/phase prev',              '回退到上一阶段'],
         ['/model <name>',           '切换模型'],
         ['/undo',                   '列出可回滚的文件快照和 snip 归档'],
         ['/undo <file_path>',       '回滚指定文件到修改前状态'],
