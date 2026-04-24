@@ -31,15 +31,70 @@ interface PendingPermission {
   resolve: (response: PermissionResponse) => void
 }
 
+/** AskUser 等待用户通过 POST /ask 返回 */
+interface PendingAsk {
+  sessionId: string
+  resolve: (answer: string) => void
+  reject: (err: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 export class HttpServerAdapter implements UIAdapter {
   private connections = new Map<string, SSEConnection>()
   private pendingPermissions = new Map<string, PendingPermission>()
   private permissionCounter = 0
+  private pendingAsks = new Map<string, PendingAsk>()
+  private askCounter = 0
 
   // SSE 连接注册（由 HTTP handler 调用）
   registerConnection(sessionId: string, res: ServerResponse, abortController: AbortController): void {
     this.connections.set(sessionId, { res, sessionId, abortController })
-    res.on('close', () => this.connections.delete(sessionId))
+    res.on('close', () => {
+      this.connections.delete(sessionId)
+      this.rejectAsksForSession(sessionId, new Error('SSE connection closed'))
+    })
+  }
+
+  private rejectAsksForSession(sessionId: string, err: Error): void {
+    for (const [id, p] of this.pendingAsks) {
+      if (p.sessionId === sessionId) {
+        clearTimeout(p.timer)
+        p.reject(err)
+        this.pendingAsks.delete(id)
+      }
+    }
+  }
+
+  /**
+   * 由 server 的 runAgentLoop 注入 askUser：向当前 SSE 客户端推送 ask_user 并等待回复
+   */
+  requestAskUser(
+    sessionId: string,
+    question: string,
+    options?: Array<{ id: string; label: string }>,
+  ): Promise<string> {
+    if (!this.connections.get(sessionId)) {
+      return Promise.reject(new Error('No active SSE for session'))
+    }
+    return new Promise((resolve, reject) => {
+      const requestId = `ask_${++this.askCounter}`
+      const timer = setTimeout(() => {
+        this.pendingAsks.delete(requestId)
+        reject(new Error('AskUser timed out'))
+      }, 120_000)
+      this.pendingAsks.set(requestId, { sessionId, resolve, reject, timer })
+      this.send(sessionId, 'ask_user', { requestId, question, options: options || [] })
+    })
+  }
+
+  /** POST /api/sessions/:id/ask 调用 */
+  resolveAskUser(requestId: string, response: { answer: string }): boolean {
+    const p = this.pendingAsks.get(requestId)
+    if (!p) return false
+    clearTimeout(p.timer)
+    this.pendingAsks.delete(requestId)
+    p.resolve((response?.answer || '').trim() || '(empty)')
+    return true
   }
 
   // 发送 SSE 事件
@@ -130,6 +185,7 @@ export class HttpServerAdapter implements UIAdapter {
 
   /** 结束指定 session 的 SSE 连接 */
   endSession(sessionId: string): void {
+    this.rejectAsksForSession(sessionId, new Error('Session ended'))
     const conn = this.connections.get(sessionId)
     if (conn && !conn.res.writableEnded) {
       this.send(sessionId, 'session_end', { sessionId })

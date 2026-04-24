@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createSession, streamChatFetch, getSessions, compactSession } from '@/lib/api'
+import AskUserDialog from '@/components/AskUserDialog'
 import type { SessionInfo } from '@/lib/api'
 import type { ChatMessage, PermissionRequest, ToolCall } from '@/lib/types'
 import MessageItem from '@/components/MessageItem'
@@ -285,6 +286,7 @@ export default function Page() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streaming, setStreaming] = useState(false)
   const [permReq, setPermReq] = useState<PermissionRequest | null>(null)
+  const [askReq, setAskReq] = useState<{ requestId: string; question: string; options: Array<{ id: string; label: string }> } | null>(null)
   const [history, setHistory] = useState<{ sessionId: string; modifiedAt: string }[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
@@ -357,6 +359,8 @@ export default function Page() {
             message: ev.message,
             riskLevel: ev.riskLevel,
           })
+        } else if (ev.type === 'ask_user' && sessionId) {
+          setAskReq({ requestId: ev.requestId, question: ev.question, options: ev.options || [] })
         } else if (ev.type === 'error') {
           patchLast(m => ({ ...m, text: m.text + (m.text ? '\n\n' : '') + `// error: ${ev.message || 'unknown'}` }))
         }
@@ -645,6 +649,15 @@ export default function Page() {
       </div>
 
       {permReq && <PermissionDialog request={permReq} onResolved={() => setPermReq(null)} />}
+      {askReq && sessionId && (
+        <AskUserDialog
+          sessionId={sessionId}
+          requestId={askReq.requestId}
+          question={askReq.question}
+          options={askReq.options}
+          onDone={() => setAskReq(null)}
+        />
+      )}
       {showConfig && <ConfigModal onClose={() => setShowConfig(false)} />}
     </div>
   )

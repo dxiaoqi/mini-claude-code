@@ -33,7 +33,9 @@ import type {
   ContextProvider,
   PermissionResponse,
   SessionState,
+  Settings,
   Tool,
+  WorkflowManagerMode,
 } from '../types.js'
 
 interface SessionEntry {
@@ -100,7 +102,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
     })
   }
 
-  function getOrCreateSession(sessionId?: string): SessionEntry {
+  async function getOrCreateSession(sessionId?: string): Promise<SessionEntry> {
     if (sessionId && sessions.has(sessionId)) {
       const s = sessions.get(sessionId)!
       s.lastActiveAt = new Date()
@@ -108,10 +110,18 @@ export function createMiniClaudeServer(config: ServerConfig) {
     }
 
     const id = sessionId || uuidv4()
+    const fileS = (await loadSettings(config.cwd).catch(() => ({}))) as Settings
+    const model = fileS.api?.model || fileS.model || config.defaultModel
     const state = createSessionState({
       cwd: config.cwd,
-      settings: { model: config.defaultModel },
+      settings: {
+        ...fileS,
+        model,
+        projectPolicy: fileS.projectPolicy,
+        workflowManager: fileS.workflowManager,
+      },
     })
+    state.model = model
     const adapter = new HttpServerAdapter()
 
     const entry: SessionEntry = {
@@ -169,6 +179,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
           fallbackModel: settings.fallbackModel,
           permissionMode: settings.permissionMode || 'default',
           devTrace: settings.devTrace || false,
+          workflowManager: settings.workflowManager ?? { mode: 'manual' },
           api: {
             provider: settings.api?.provider,
             anthropicBaseUrl: settings.api?.anthropicBaseUrl,
@@ -200,6 +211,13 @@ export function createMiniClaudeServer(config: ServerConfig) {
         if (body.permissionMode) existing.permissionMode = body.permissionMode
         if (body.devTrace !== undefined) existing.devTrace = body.devTrace
         if (body.fallbackModel !== undefined) existing.fallbackModel = body.fallbackModel
+        if (body.workflowManager && typeof body.workflowManager === 'object' && (body.workflowManager as { mode?: string }).mode) {
+          const m = (body.workflowManager as { mode?: string; model?: string }).mode
+          const wm: Record<string, unknown> = { mode: m }
+          const wmod = (body.workflowManager as { model?: string }).model
+          if (typeof wmod === 'string' && wmod.length > 0) wm.model = wmod
+          existing.workflowManager = wm
+        }
 
         // api 子对象
         if (body.api && typeof body.api === 'object') {
@@ -229,6 +247,20 @@ export function createMiniClaudeServer(config: ServerConfig) {
             entry.state.model = newModel
           }
         }
+        if (body.workflowManager && typeof body.workflowManager === 'object') {
+          const wm = body.workflowManager as { mode?: string; model?: string }
+          for (const entry of sessions.values()) {
+            entry.state.settings = {
+              ...entry.state.settings,
+              workflowManager: {
+                ...entry.state.settings.workflowManager,
+                ...(wm.mode ? { mode: wm.mode as WorkflowManagerMode } : {}),
+                ...(typeof wm.model === 'string' ? { model: wm.model } : {}),
+              },
+            }
+            entry.state.systemPromptSectionCache.clear()
+          }
+        }
 
         json(res, { ok: true })
       } catch (err) {
@@ -256,7 +288,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
 
       // 恢复历史 session
       if (body.resumeSessionId) {
-        entry = getOrCreateSession(body.resumeSessionId)
+        entry = await getOrCreateSession(body.resumeSessionId)
         if (entry.state.messages.length === 0) {
           const messages = await loadTranscript(config.cwd, body.resumeSessionId).catch(() => [])
           if (messages.length > 0) {
@@ -265,7 +297,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
           }
         }
       } else {
-        entry = getOrCreateSession(body.sessionId)
+        entry = await getOrCreateSession(body.sessionId)
       }
 
       if (body.model) {
@@ -329,6 +361,20 @@ export function createMiniClaudeServer(config: ServerConfig) {
       return
     }
 
+    // ── POST /api/sessions/:id/ask  { requestId, answer } — 回复 AskUser / WorkflowManager 子 Agent ──
+    const askMatch = path.match(/^\/api\/sessions\/([^/]+)\/ask$/)
+    if (method === 'POST' && askMatch) {
+      const sid = askMatch[1]
+      const body = (await readBody(req)) as { requestId?: string; answer?: string }
+      if (!body.requestId) {
+        return json(res, { error: 'requestId required' }, 400)
+      }
+      const entry = sessions.get(sid)
+      if (!entry) return json(res, { error: 'Session not found' }, 404)
+      const ok = entry.adapter.resolveAskUser(body.requestId, { answer: (body.answer || '').trim() })
+      return json(res, ok ? { ok: true } : { ok: false, error: 'Unknown or expired requestId' }, ok ? 200 : 400)
+    }
+
     // ── POST /api/sessions/:id/chat  (SSE) ──
     const chatMatch = path.match(/^\/api\/sessions\/([^/]+)\/chat$/)
     if (method === 'POST' && chatMatch) {
@@ -343,7 +389,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
         return json(res, { error: 'message is required' }, 400)
       }
 
-      const entry = getOrCreateSession(sessionId)
+      const entry = await getOrCreateSession(sessionId)
 
       if (body.model) entry.state.model = body.model
       if (body.bypassPermissions) entry.state.permissionMode = 'bypass'
@@ -378,6 +424,7 @@ export function createMiniClaudeServer(config: ServerConfig) {
             adapter: sessionAdapter,
             contextProviders: entry.contextProviders,
             mcpManager: entry.mcpManager,
+            askUser: (q, o) => entry.adapter.requestAskUser(sessionId, q, o),
           },
           body.message,
         )

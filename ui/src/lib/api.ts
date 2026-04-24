@@ -37,6 +37,7 @@ export type SSEEvent =
   | { type: 'tool_end'; toolName: string; output: unknown }
   | { type: 'turn_complete'; turnCount: number; usage: { inputTokens: number; outputTokens: number } }
   | { type: 'permission_request'; requestId: string; toolName: string; input: Record<string, unknown>; message: string; riskLevel: string }
+  | { type: 'ask_user'; requestId: string; question: string; options: Array<{ id: string; label: string }> }
   | { type: 'error'; message?: string; error?: { message: string } }
   | { type: 'done'; sessionId: string }
   | { type: 'session_end'; sessionId: string }
@@ -71,11 +72,15 @@ export async function compactSession(sessionId: string): Promise<{ ok: boolean; 
 
 // ── Config API ────────────────────────────────────────────────────────────────
 
+export type WorkflowManagerMode = 'manual' | 'advisory' | 'auto'
+
 export interface WorkspaceConfig {
   model?: string
   fallbackModel?: string
   permissionMode?: 'default' | 'plan' | 'auto' | 'bypass'
   devTrace?: boolean
+  /** auto: 独立 WorkflowManager 子代理管阶段；advisory: 主对话可调 WorkflowPhase；manual: 仅手切 */
+  workflowManager?: { mode?: WorkflowManagerMode; model?: string }
   tavilyApiKey?: string
   api?: {
     provider?: string
@@ -114,6 +119,19 @@ export async function respondPermission(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decision }),
   })
+}
+
+export async function respondAskUser(
+  sessionId: string,
+  requestId: string,
+  answer: string,
+): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId, answer }),
+  })
+  return res.json()
 }
 
 export function streamChat(

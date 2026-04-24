@@ -7,6 +7,8 @@
 
 import type { ContextProvider, SessionState, SystemPromptBlock, Tool } from '../types.js'
 
+const WORKFLOW_MANAGER_MINIMAL_PROMPT = `You are the WorkflowManager sub-agent for this project. Your job: align the active workflow phase with user intent, use AskUser when human input is required, and use WorkflowPhase only with a clear justification. You must not use Bash, FileRead, or any code-editing tool — only AskUser, Skill (optional, for policy text in .blino/skills packs), ToolSearch, and WorkflowPhase. Be concise.`
+
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
 // ──────────────────────────────────────────────
@@ -113,6 +115,9 @@ function getToolUseSection(enabledToolNames: string[]): string {
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`
       : null,
+    enabledToolNames.includes('WorkflowManager')
+      ? `In **auto** workflow mode, do NOT call WorkflowPhase yourself. For phase alignment, HIL checks, or policy questions, use ToolSearch to load **WorkflowManager** and pass a short task string. The workflow sub-agent runs in a separate context so your main work stays uncluttered.`
+      : null,
   ].filter(Boolean)
 
   return `# Using your tools\n\n${items.join('\n')}`
@@ -141,6 +146,37 @@ function getToneSection(): string {
 - Do not use a colon before tool calls. Text like "Let me read the file:" should be "Let me read the file." with a period.`
 }
 
+function getWorkflowMainSection(state: SessionState, enabledNames: string[]): string | null {
+  const pol = state.settings.projectPolicy
+  if (!pol?.phases?.length) return null
+  const mode = state.settings.workflowManager?.mode ?? 'manual'
+  const idx = state.activePhaseIndex ?? 0
+  const ph = pol.phases[idx] || pol.phases[0]
+  const lines: string[] = [
+    '# Project workflow',
+    '',
+    `- **Profile**: \`${pol.profile}\` (v${pol.schemaVersion})`,
+    `- **Mode**: \`${mode}\``,
+    `- **Current phase** (${idx + 1}/${pol.phases.length}): \`${ph.id}\`${ph.notes ? ` — ${ph.notes}` : ''}`,
+  ]
+  if (ph.activateSkillPacks?.length) {
+    lines.push(`- **Skill packs** (active): ${ph.activateSkillPacks.map(p => `\`${p}\``).join(', ')}`)
+  }
+  if (mode === 'manual') {
+    lines.push('\nPhases are advanced only from the project panel (or /phase in CLI if available). The main agent does not change the workflow phase.', '')
+  } else if (mode === 'advisory') {
+    if (enabledNames.includes('WorkflowPhase')) {
+      lines.push('\nYou may use **WorkflowPhase** (load via ToolSearch) when a milestone clearly matches another phase. Do not over-switch.', '')
+    }
+  } else {
+    lines.push(
+      '\n**Auto** mode: use **WorkflowManager** (ToolSearch) for phase or HIL; do not call WorkflowPhase from this chat.',
+      '',
+    )
+  }
+  return lines.join('\n')
+}
+
 // ──────────────────────────────────────────────
 //  组装
 // ──────────────────────────────────────────────
@@ -162,17 +198,25 @@ export async function buildSystemPrompt(
   tools: Tool[],
   contextProviders: ContextProvider[],
 ): Promise<SystemPromptBlock[]> {
+  if (state.settings.blinoSubAgent === 'workflow-manager') {
+    return [{ text: WORKFLOW_MANAGER_MINIMAL_PROMPT, cacheScope: 'global' }]
+  }
+
   const blocks: SystemPromptBlock[] = []
 
   // ── 静态区（cacheScope: 'global'，跨会话可缓存）──
+  const forPrompt = (t: Tool) => {
+    if (t.shouldIncludeInApi && !t.shouldIncludeInApi({ state })) return false
+    return !t.shouldDefer || t.alwaysLoad
+  }
   const enabledToolNames = tools
-    .filter(t => !t.shouldDefer || t.alwaysLoad)
+    .filter(forPrompt)
     .map(t => t.name)
 
   const staticParts: string[] = [getBaseSystemPrompt(enabledToolNames)]
 
   // 活跃工具描述（非 deferred）
-  const activeTools = tools.filter(t => !t.shouldDefer || t.alwaysLoad)
+  const activeTools = tools.filter(forPrompt)
   const toolDescriptions = activeTools.map(t => {
     const desc = typeof t.description === 'string' ? t.description : t.name
     return `- **${t.name}**: ${desc}`
@@ -182,7 +226,9 @@ export async function buildSystemPrompt(
   }
 
   // 提示 deferred 工具的存在
-  const deferredTools = tools.filter(t => t.shouldDefer && !t.alwaysLoad)
+  const deferredTools = tools.filter(
+    t => t.shouldDefer && !t.alwaysLoad && (!t.shouldIncludeInApi || t.shouldIncludeInApi({ state })),
+  )
   if (deferredTools.length > 0) {
     const names = deferredTools.map(t => t.name).join(', ')
     staticParts.push(
@@ -190,6 +236,15 @@ export async function buildSystemPrompt(
       `The following tools are available but not loaded by default: ${names}.\n` +
       `Use ToolSearch to find and load them when needed.`
     )
+  }
+
+  if (state.settings.systemPromptAddendum) {
+    staticParts.push(`---\n${state.settings.systemPromptAddendum}`)
+  }
+
+  const wfMain = getWorkflowMainSection(state, enabledToolNames)
+  if (wfMain) {
+    staticParts.push(wfMain)
   }
 
   blocks.push({

@@ -152,6 +152,9 @@ export interface Tool<Input = any, Output = any> {
   readonly shouldDefer?: boolean
   readonly alwaysLoad?: boolean
 
+  /** When set, tool may be hidden from the API tool list per session (e.g. WorkflowPhase in manual/auto). */
+  shouldIncludeInApi?(ctx: { state: SessionState }): boolean
+
   isEnabled?(): boolean
   maxResultSizeChars?: number
 
@@ -217,6 +220,20 @@ export interface AgentHandle {
   onComplete: Promise<{ result: string; usage: Usage }>
 }
 
+/** 工作流由谁推进阶段：仅 auto 下启用独立 WorkflowManager 子 Agent */
+export type WorkflowManagerMode = 'manual' | 'advisory' | 'auto'
+
+export interface ProjectWorkflowPolicy {
+  schemaVersion: number
+  profile: string
+  mermaid?: string
+  phases?: Array<{
+    id: string
+    notes?: string
+    activateSkillPacks?: string[]
+  }>
+}
+
 export interface Settings {
   model?: string
   fallbackModel?: string
@@ -224,6 +241,13 @@ export interface Settings {
   customApiKey?: string
   permissionMode?: PermissionMode
   permissionRules?: PermissionRule[]
+  /**
+   * manual: 仅手切阶段；advisory: 主 Agent 可调 WorkflowPhase；auto: 由 WorkflowManager 子 Agent 管阶段
+   * `model` 可选，用于子 Agent（默认与主模型相同）
+   */
+  workflowManager?: { mode?: WorkflowManagerMode; model?: string }
+  /** 内部：轻量子 Agent 循环使用精简 system prompt */
+  blinoSubAgent?: 'workflow-manager'
   mcpServers?: Record<string, MCPServerConfig>
   /** 外部 Hooks 配置（PreToolUse / PostToolUse / Stop） */
   hooks?: Record<string, unknown>
@@ -247,6 +271,10 @@ export interface Settings {
    * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
    */
   devTrace?: boolean
+  /** UI/Artifacts 可注入的 extra system 片段 */
+  systemPromptAddendum?: string
+  /** `<project>/.blino/workflow.json` */
+  projectPolicy?: ProjectWorkflowPolicy
 }
 
 export interface MCPServerConfig {
@@ -292,6 +320,12 @@ export interface SessionState {
   model: string
   fallbackModel?: string
   settings: Settings
+
+  /** 来自 projectPolicy.phases，由 workflowRuntime 维护 */
+  activePhaseIndex?: number
+  activePhaseId?: string
+  /** 非空时 Skill 仅加载这些子目录 */
+  activeSkillPacks?: string[]
 }
 
 // ────────────────────────────────────────────

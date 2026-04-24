@@ -15,13 +15,14 @@ import type {
   Settings,
   Usage,
 } from '../types.js'
+import { applyWorkflowRuntimeToState } from '../utils/workflowRuntime.js'
 
 export function createSessionState(options: {
   cwd: string
   projectRoot?: string
   settings?: Settings
 }): SessionState {
-  return {
+  const state: SessionState = {
     sessionId: uuidv4(),
     cwd: options.cwd,
     projectRoot: options.projectRoot || options.cwd,
@@ -51,6 +52,9 @@ export function createSessionState(options: {
     settings: options.settings || {},
     lastTurnInputTokens: 0,
   }
+  state.activePhaseIndex = 0
+  applyWorkflowRuntimeToState(state)
+  return state
 }
 
 export function accumulateUsage(state: SessionState, usage: Usage, model: string): void {
@@ -91,4 +95,6 @@ export function clearSession(state: SessionState): void {
     fastModeHeaderLatched: null,
     thinkingClearLatched: null,
   }
+  state.activePhaseIndex = 0
+  applyWorkflowRuntimeToState(state)
 }

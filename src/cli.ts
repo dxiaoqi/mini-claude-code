@@ -25,6 +25,8 @@ import { ImageReadTool } from './tools/content/ImageReadTool.js'
 import { PDFReadTool } from './tools/content/PDFReadTool.js'
 import { createToolSearchTool } from './tools/ToolSearchTool.js'
 import { SkillTool, invalidateSkillCache } from './tools/interaction/SkillTool.js'
+import { WorkflowPhaseTool } from './tools/workflow/WorkflowPhaseTool.js'
+import { createWorkflowManagerTool } from './tools/workflow/WorkflowManagerTool.js'
 import { TodoWriteTool, clearTodos } from './tools/interaction/TodoWriteTool.js'
 import { AskUserTool } from './tools/interaction/AskUserTool.js'
 import { createAgentTool } from './tools/agent/AgentTool.js'
@@ -164,12 +166,16 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   const state = createSessionState({
     cwd,
     settings: {
+      ...fileSettings,
       model,
       permissionMode: bypassPermissions ? 'bypass' : (isPipe ? 'bypass' : 'default'),
       permissionRules: fileSettings.permissionRules,
+      projectPolicy: fileSettings.projectPolicy,
+      workflowManager: fileSettings.workflowManager,
       logger,
     },
   })
+  state.model = model
 
   logger.info('Session initialized', {
     sessionId: state.sessionId,
@@ -196,7 +202,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   const coreTools: Tool[] = [
     BashTool, FileReadTool, FileEditTool, FileWriteTool,
     GlobTool, GrepTool,
-    TodoWriteTool, AskUserTool, SkillTool,
+    TodoWriteTool, AskUserTool, SkillTool, WorkflowPhaseTool,
     SendMessageTool, TaskStopTool, TaskOutputTool,
   ]
 
@@ -253,7 +259,8 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
   // 组装完整工具列表
   const allBaseTools = [...coreTools, ...deferredTools, ...mcpTools]
-  const toolSearchTool = createToolSearchTool(allBaseTools)
+  const workflowManagerTool = createWorkflowManagerTool(apiClient)
+  const toolSearchTool = createToolSearchTool([...allBaseTools, workflowManagerTool])
 
   // AgentTool：子 Agent 权限策略
   //   - pipe/bypass 模式：全部自动通过
@@ -276,7 +283,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     return checkToolPermission(tool, input, toolContext)
   })
 
-  const tools: Tool[] = [...allBaseTools, toolSearchTool, agentTool]
+  const tools: Tool[] = [...allBaseTools, toolSearchTool, workflowManagerTool, agentTool]
 
   if (isPipe) {
     // Pipe mode
@@ -330,10 +337,11 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   // ── HTTP Server 模式 ──
   if (isServe) {
     const { createMiniClaudeServer } = await import('./server/index.js')
+    const workflowManagerForServer = createWorkflowManagerTool(apiClient)
     const allBaseToolsForServer: Tool[] = [
       BashTool, FileReadTool, FileEditTool, FileWriteTool,
       GlobTool, GrepTool,
-      TodoWriteTool, AskUserTool, SkillTool,
+      TodoWriteTool, AskUserTool, SkillTool, WorkflowPhaseTool,
       SendMessageTool, TaskStopTool, TaskOutputTool,
       // deferred 工具
       WebFetchTool, webSearchTool, NotebookEditTool, ImageReadTool, PDFReadTool,
@@ -346,9 +354,9 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         allBaseToolsForServer.push(...adaptMCPTools(cfg.name, conn.tools, conn.client))
       } catch { /* ignore */ }
     }
-    const toolSearchForServer = createToolSearchTool(allBaseToolsForServer)
+    const toolSearchForServer = createToolSearchTool([...allBaseToolsForServer, workflowManagerForServer])
     const agentToolForServer = createAgentTool(apiClient, allBaseToolsForServer, contextProviders, async () => ({ behavior: 'allow' as const }))
-    const allToolsForServer: Tool[] = [...allBaseToolsForServer, toolSearchForServer, agentToolForServer]
+    const allToolsForServer: Tool[] = [...allBaseToolsForServer, toolSearchForServer, workflowManagerForServer, agentToolForServer]
 
     const requestedPort = parseInt((options.port as string) || process.env.PORT || '3001', 10)
     const host = (options.host as string) || process.env.HOST || 'localhost'

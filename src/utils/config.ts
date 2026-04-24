@@ -27,6 +27,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import type { PermissionRule, Settings } from '../types.js'
 import { BLINO_DIR } from './paths.js'
+import { loadWorkflowPolicy, mergeSettingsWithPolicy, getWorkflowPath } from './workflow.js'
 
 // ── 路径 ──
 
@@ -89,7 +90,12 @@ export async function loadSettings(projectRoot: string): Promise<Settings> {
     }
   }
 
-  return merged as unknown as Settings
+  const base = merged as unknown as Settings
+  const { policy, error } = await loadWorkflowPolicy(projectRoot)
+  if (error) {
+    console.warn(`[blino] ${getWorkflowPath(projectRoot)}: ${error}`)
+  }
+  return mergeSettingsWithPolicy(base, policy)
 }
 
 /**

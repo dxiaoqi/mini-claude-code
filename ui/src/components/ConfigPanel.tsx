@@ -161,6 +161,62 @@ export default function ConfigPanel({ onClose }: Props) {
           </Field>
         </Section>
 
+        <Section title="Workflow (project)">
+          <Field
+            label="Workflow mode"
+            hint="controls phase + WorkflowManager; saved to local settings"
+          >
+            <select
+              className="input-base"
+              value={draft.workflowManager?.mode || 'manual'}
+              title="手工：主对话不调阶段。建议：主对话可通过 WorkflowPhase 改阶段。自动：主对话不直接改阶段，由轻量子代理 WorkflowManager 处理"
+              onChange={e =>
+                update({
+                  workflowManager: {
+                    ...draft.workflowManager,
+                    mode: e.target.value as 'manual' | 'advisory' | 'auto',
+                  },
+                })
+              }
+            >
+              <option
+                value="manual"
+                title="关闭：不启用独立工作流子代理；主对话不调 WorkflowPhase；由你在面板/CLI 切阶段。适合完全手动控制。"
+              >
+                手工 — 主对话不推进阶段
+              </option>
+              <option
+                value="advisory"
+                title="主对话在需要时通过 ToolSearch→WorkflowPhase 自己改阶段；不启动独立子代理。适合想自己掌控但要模型偶尔协助。"
+              >
+                建议 — 主代理可调 WorkflowPhase
+              </option>
+              <option
+                value="auto"
+                title="开启：主聊天专注工程实现；用 ToolSearch→WorkflowManager 启动轻量子代理，仅持 WorkflowPhase/AskUser/Skill 管理阶段与 HIL。主对话不直接调用 WorkflowPhase。"
+              >
+                自动 — 独立 WorkflowManager 子代理
+              </option>
+            </select>
+          </Field>
+          <Field
+            label="Workflow 子代理模型 (可选)"
+            hint="留空则用主模型"
+          >
+            <input
+              type="text"
+              className="input-base mono"
+              value={draft.workflowManager?.model || ''}
+              onChange={e =>
+                update({
+                  workflowManager: { ...draft.workflowManager, model: e.target.value || undefined },
+                })
+              }
+              placeholder="same as main model"
+            />
+          </Field>
+        </Section>
+
         <Section title="Developer">
           <Field label="Dev Trace" hint="record session events to .trace.jsonl">
             <label className="toggle">
