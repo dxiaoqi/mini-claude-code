@@ -27,7 +27,7 @@
 │  │Glob,Grep│  │FileWrite│  │Grep    │                   │
 │  └─────────┘  └─────────┘  └─────────┘                 │
 │                                                          │
-│  共享: Scratchpad 临时目录 (/tmp/mini-claude-scratchpad-*)│
+│  共享: Scratchpad 临时目录 (/tmp/blino-scratchpad-*)│
 │  隔离: 各自独立的 messages 上下文                         │
 │  回传: <task-notification> XML                           │
 └──────────────────────────────────────────────────────────┘
@@ -107,7 +107,7 @@ previous conversation. Include all necessary context in the prompt.
 
 ```typescript
 // 启动时创建临时目录
-const scratchpadDir = await mkdtemp(join(tmpdir(), 'mini-claude-scratchpad-'))
+const scratchpadDir = await mkdtemp(join(tmpdir(), 'blino-scratchpad-'))
 
 // Worker 可以在 scratchpad 中读写文件，无需权限确认
 // 用于跨 Worker 传递：研究笔记、实施规格、中间文件

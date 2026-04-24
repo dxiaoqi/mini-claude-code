@@ -1,4 +1,4 @@
-# Mini Claude Code
+# Blino (mini-claude-code)
 
 一个思路对齐 Claude Code 的轻量级 AI 编程助手。保留核心 Agent 能力，精简架构，为后续扩展预留接口。
 
@@ -95,7 +95,7 @@ npx tsx src/cli.ts --coordinator
 
 ### MCP 动态工具
 
-通过 `.mini-claude/settings.json` 配置 MCP 服务器后自动发现。
+通过 `.blino/settings.json` 配置 MCP 服务器后自动发现。
 
 ## 权限系统
 
@@ -123,7 +123,7 @@ Tool 请求
 
 ### 规则持久化
 
-- Session 级规则在退出时写入 `.mini-claude/settings.local.json`
+- Session 级规则在退出时写入 `.blino/settings.local.json`
 - 启动时从 user / project / local 三级配置加载
 
 ## 上下文压缩管线
@@ -166,7 +166,7 @@ const myProvider: ContextProvider = {
 
 ## Skill 系统
 
-在 `.mini-claude/skills/` 下创建 Markdown 文件：
+在 `.blino/skills/` 下创建 Markdown 文件：
 
 ```markdown
 ---
@@ -182,7 +182,7 @@ allowedTools: [Bash]
 
 ## MCP 配置
 
-`.mini-claude/settings.json`：
+`.blino/settings.json`：
 
 ```json
 {

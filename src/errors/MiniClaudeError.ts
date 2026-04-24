@@ -1,7 +1,7 @@
 /**
  * MiniClaudeError - Base Error Class
  *
- * Base class for all custom errors in mini-claude-code.
+ * Base class for all custom errors in Blino.
  */
 import { ErrorCategory } from './types.js'
 import type { ErrorContext, SuggestedAction, ErrorMetadata } from './types.js'

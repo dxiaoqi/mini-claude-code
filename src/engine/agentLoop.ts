@@ -111,7 +111,7 @@ export async function* agentLoop(
     const systemPrompt = await buildSystemPrompt(state, params.tools, params.contextProviders)
 
     // ── Phase 2: 过滤 deferred 工具，构建 API schema ──
-    const activeTools = filterActiveTools(params.tools, discoveredToolNames)
+    const activeTools = filterActiveTools(params.tools, discoveredToolNames, state)
     const toolSchemas = getAPIToolSchemas(activeTools)
 
     // ── Phase 3: 流式 API 调用 ──
@@ -376,8 +376,13 @@ export async function* agentLoop(
  * 过滤 deferred 工具：只有被 ToolSearch 发现过的 deferred 工具才发给 API。
  * ToolSearch 本身和 alwaysLoad 工具始终包含。
  */
-function filterActiveTools(tools: Tool[], discoveredNames: Set<string>): Tool[] {
+function filterActiveTools(
+  tools: Tool[],
+  discoveredNames: Set<string>,
+  state: SessionState,
+): Tool[] {
   return tools.filter(tool => {
+    if (tool.shouldIncludeInApi && !tool.shouldIncludeInApi({ state })) return false
     if (tool.alwaysLoad) return true
     if (tool.name === 'ToolSearch') return true
     if (!tool.shouldDefer) return true

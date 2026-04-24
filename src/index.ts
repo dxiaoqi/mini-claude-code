@@ -88,6 +88,8 @@ export { loadMCPConfigs } from './mcp/config.js'
 // Skills
 export { loadSkills } from './context/skills.js'
 export { SkillTool, invalidateSkillCache } from './tools/interaction/SkillTool.js'
+export { WorkflowPhaseTool } from './tools/workflow/WorkflowPhaseTool.js'
+export { createWorkflowManagerTool } from './tools/workflow/WorkflowManagerTool.js'
 export { TodoWriteTool, getCurrentTodos, clearTodos } from './tools/interaction/TodoWriteTool.js'
 export { AskUserTool } from './tools/interaction/AskUserTool.js'
 

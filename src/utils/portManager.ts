@@ -3,7 +3,7 @@
  *
  * 解决多 workspace 同时运行 --tui 时的端口冲突问题：
  *   1. 自动探测可用端口（从默认端口开始向上扫描）
- *   2. 在 .mini-claude/server.json 写入锁文件（记录 pid + port + cwd）
+ *   2. 在 .blino/server.json 写入锁文件（记录 pid + port + cwd）
  *   3. 启动时检查锁文件：若同一 workspace 已有实例运行则复用（直接打开浏览器）
  *   4. 进程退出时自动清理锁文件
  */
@@ -11,6 +11,7 @@
 import { createServer } from 'node:net'
 import { writeFile, readFile, mkdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { BLINO_DIR } from './paths.js'
 
 export interface ServerLockInfo {
   pid: number
@@ -61,7 +62,7 @@ export async function findAvailablePort(
 // ── Workspace 锁文件 ─────────────────────────────────────────────────────────
 
 function getLockFilePath(cwd: string): string {
-  return resolve(cwd, '.mini-claude', LOCK_FILE_NAME)
+  return resolve(cwd, BLINO_DIR, LOCK_FILE_NAME)
 }
 
 /**
@@ -81,7 +82,7 @@ export async function writeServerLock(
     startedAt: new Date().toISOString(),
   }
   const path = getLockFilePath(cwd)
-  await mkdir(resolve(cwd, '.mini-claude'), { recursive: true })
+  await mkdir(resolve(cwd, BLINO_DIR), { recursive: true })
   await writeFile(path, JSON.stringify(info, null, 2) + '\n', 'utf-8')
 }
 

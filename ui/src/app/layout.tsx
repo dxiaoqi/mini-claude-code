@@ -5,7 +5,7 @@ import { ThemeProvider } from '@/context/ThemeContext'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'mini-claude-code',
+  title: 'Blino',
   description: 'AI coding assistant',
 }
 

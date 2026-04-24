@@ -7,7 +7,7 @@ MCP（Model Context Protocol）是 Anthropic 提出的工具服务器协议。�
 ### 架构
 
 ```
-.mini-claude/settings.json
+.blino/settings.json
   → loadMCPConfigs()        — 三级配置合并
   → MCPClientManager
     → connect(config)       — stdio 或 HTTP 传输
@@ -61,9 +61,9 @@ mcp__sqlite__list_tables  — sqlite 服务器的 list_tables 工具
 ### 三级配置合并
 
 ```
-~/.mini-claude/settings.json          — 用户级（全局）
-.mini-claude/settings.json            — 项目级（提交到 git）
-.mini-claude/settings.local.json      — 本地级（不提交）
+~/.blino/settings.json          — 用户级（全局）
+.blino/settings.json            — 项目级（提交到 git）
+.blino/settings.local.json      — 本地级（不提交）
 ```
 
 后读覆盖先读。支持 `${VAR}` 环境变量展开。
@@ -75,7 +75,7 @@ Skill 是带结构化元数据的 Markdown prompt 文件，定义了可复用的
 ### 文件结构
 
 ```
-.mini-claude/skills/
+.blino/skills/
 ├── commit.md       — git commit 工作流
 ├── review.md       — 代码 review 工作流
 └── deploy.md       — 部署工作流
@@ -116,7 +116,7 @@ const prompt = match[2]       // 工作流 prompt
 AI 决定: SkillTool({ skill: "commit" })
   ↓
 SkillTool.call():
-  1. loadSkills() — 从 .mini-claude/skills/ 加载
+  1. loadSkills() — 从 .blino/skills/ 加载
   2. 找到 "commit" skill
   3. 返回 skill.prompt 作为 tool_result
   ↓
@@ -132,4 +132,4 @@ SkillTool({ skill: "list" })
 
 ### 缓存
 
-Skill 列表在首次调用时加载并缓存，`/clear` 时失效。修改 `.mini-claude/skills/` 下的文件后，`/clear` 可刷新。
+Skill 列表在首次调用时加载并缓存，`/clear` 时失效。修改 `.blino/skills/` 下的文件后，`/clear` 可刷新。
