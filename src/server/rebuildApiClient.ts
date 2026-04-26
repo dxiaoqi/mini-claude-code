@@ -6,6 +6,7 @@ import { createAnthropicClient } from '../api/anthropicClient.js'
 import { withRetry, withFallback } from '../api/retry.js'
 import { resolveApiConfig } from '../utils/config.js'
 import type { APIClient } from '../types.js'
+import { BLINO_CONFIG_FILE, BLINO_DIR_NAME } from '../constants/blinoPaths.js'
 
 export async function rebuildApiClientFromWorkspace(cwd: string): Promise<APIClient> {
   const resolved = await resolveApiConfig(cwd)
@@ -19,7 +20,7 @@ export async function rebuildApiClientFromWorkspace(cwd: string): Promise<APICli
   } else {
     if (!resolved.baseUrl) {
       throw new Error(
-        'OpenAI-compatible provider requires a base URL (set openaiBaseUrl in .blino/settings.local.json or OPENAI_BASE_URL)',
+        `OpenAI-compatible provider requires a base URL (set openaiBaseUrl in ${BLINO_DIR_NAME}/${BLINO_CONFIG_FILE.settingsLocal} or OPENAI_BASE_URL)`,
       )
     }
     base = createOpenAICompatibleClient({

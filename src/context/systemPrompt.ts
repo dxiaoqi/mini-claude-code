@@ -6,6 +6,7 @@
  */
 
 import type { ContextProvider, SessionState, SystemPromptBlock, Tool } from '../types.js'
+import { BLINO_DIR_NAME } from '../constants/blinoPaths.js'
 
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
@@ -108,7 +109,7 @@ function getToolUseSection(enabledToolNames: string[]): string {
       ? `Use Agent for parallelizable subtasks or to protect the main context from excessive results. Don't duplicate work that agents are already doing.`
       : null,
     enabledToolNames.includes('Skill')
-      ? `Use the Skill tool to execute project-defined workflows from .blino/skills/.`
+      ? `Use the Skill tool to execute project-defined workflows from ${BLINO_DIR_NAME}/skills/.`
       : null,
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`
@@ -157,6 +158,26 @@ export function getBaseSystemPrompt(enabledToolNames: string[]): string {
   ].join('\n\n')
 }
 
+/**
+ * 当子 Agent 等上下文传入 **零工具** 时使用，避免套用法默认的「CLI 编码代理 + Bash/文件」提示，
+ * 防止模型在纯文本任务中模仿工具调用或把 workflow/编排当作可执行命令。
+ */
+export function getTextOnlyBasePrompt(): string {
+  return [
+    `# Role`,
+    `You are a text-generation assistant. This turn has **no tools**: you cannot run shell commands, read or edit files, call APIs, or use any function. Do not output tool call syntax, function-call blocks, or tags such as <tool_call> or <function=…> — only produce the text the user asked for (plain text or markdown is fine if it fits the request).`,
+
+    `# Task`,
+    `Follow the user message only. If prior messages mention workflows or other agents, treat them as **context to read from**, not as instructions to run or automate.`,
+
+    getOutputSection(),
+    `# Tone and style
+- Do not use emojis unless the user explicitly requests them.
+- Do not add a colon before a fake or simulated tool call — there are no tool calls.`,
+
+  ].join('\n\n')
+}
+
 export async function buildSystemPrompt(
   state: SessionState,
   tools: Tool[],
@@ -169,27 +190,36 @@ export async function buildSystemPrompt(
     .filter(t => !t.shouldDefer || t.alwaysLoad)
     .map(t => t.name)
 
-  const staticParts: string[] = [getBaseSystemPrompt(enabledToolNames)]
-
-  // 活跃工具描述（非 deferred）
-  const activeTools = tools.filter(t => !t.shouldDefer || t.alwaysLoad)
-  const toolDescriptions = activeTools.map(t => {
-    const desc = typeof t.description === 'string' ? t.description : t.name
-    return `- **${t.name}**: ${desc}`
-  })
-  if (toolDescriptions.length > 0) {
-    staticParts.push(`## Available Tools\n\n${toolDescriptions.join('\n')}`)
+  const staticParts: string[] = []
+  if (state.orchestratorSystemPreamble) {
+    staticParts.push(state.orchestratorSystemPreamble)
   }
 
-  // 提示 deferred 工具的存在
-  const deferredTools = tools.filter(t => t.shouldDefer && !t.alwaysLoad)
-  if (deferredTools.length > 0) {
-    const names = deferredTools.map(t => t.name).join(', ')
-    staticParts.push(
-      `## Additional Tools (use ToolSearch to discover)\n\n` +
-      `The following tools are available but not loaded by default: ${names}.\n` +
-      `Use ToolSearch to find and load them when needed.`
-    )
+  if (tools.length === 0) {
+    staticParts.push(getTextOnlyBasePrompt())
+  } else {
+    staticParts.push(getBaseSystemPrompt(enabledToolNames))
+
+    // 活跃工具描述（非 deferred）
+    const activeTools = tools.filter(t => !t.shouldDefer || t.alwaysLoad)
+    const toolDescriptions = activeTools.map(t => {
+      const desc = typeof t.description === 'string' ? t.description : t.name
+      return `- **${t.name}**: ${desc}`
+    })
+    if (toolDescriptions.length > 0) {
+      staticParts.push(`## Available Tools\n\n${toolDescriptions.join('\n')}`)
+    }
+
+    // 提示 deferred 工具的存在
+    const deferredTools = tools.filter(t => t.shouldDefer && !t.alwaysLoad)
+    if (deferredTools.length > 0) {
+      const names = deferredTools.map(t => t.name).join(', ')
+      staticParts.push(
+        `## Additional Tools (use ToolSearch to discover)\n\n` +
+        `The following tools are available but not loaded by default: ${names}.\n` +
+        `Use ToolSearch to find and load them when needed.`
+      )
+    }
   }
 
   // UI 注入的额外内容（Artifacts 模式注入 visual-protocol 等）

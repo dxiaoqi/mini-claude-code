@@ -5,8 +5,8 @@
  * 后读覆盖先读（local > project > user），并归一化为运行时可用的 MCPServerConfig。
  */
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import type { MCPServerConfig } from '../types.js'
+import { BLINO_CONFIG_FILE, resolveProjectBlinoPath, resolveUserBlinoPath, getUserHomeDir } from '../constants/blinoPaths.js'
 
 interface MCPConfigFile {
   mcpServers?: Record<string, MCPServerConfigRaw>
@@ -22,21 +22,21 @@ interface MCPServerConfigRaw {
 
 /**
  * Load and merge MCP configs from three levels:
- *   1. User-level:   ~/.blino/settings.json
- *   2. Project-level: .blino/settings.json
- *   3. Local-level:   .blino/settings.local.json (not committed)
+ *   1. User-level:   <用户主目录>/.blino/settings.json
+ *   2. Project-level: <项目>/.blino/settings.json
+ *   3. Local-level:   <项目>/.blino/settings.local.json (not committed)
  *
  * Later levels override earlier ones (local > project > user).
  */
 export async function loadMCPConfigs(
   projectRoot: string,
 ): Promise<MCPServerConfig[]> {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+  const homeDir = getUserHomeDir()
 
   const configPaths = [
-    homeDir ? resolve(homeDir, '.blino', 'settings.json') : null,
-    resolve(projectRoot, '.blino', 'settings.json'),
-    resolve(projectRoot, '.blino', 'settings.local.json'),
+    homeDir ? resolveUserBlinoPath(BLINO_CONFIG_FILE.settings) : null,
+    resolveProjectBlinoPath(projectRoot, BLINO_CONFIG_FILE.settings),
+    resolveProjectBlinoPath(projectRoot, BLINO_CONFIG_FILE.settingsLocal),
   ].filter(Boolean) as string[]
 
   const merged: Record<string, MCPServerConfigRaw> = {}

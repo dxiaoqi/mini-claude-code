@@ -25,8 +25,27 @@ export type {
 export { createOpenAICompatibleClient } from './api/client.js'
 export { createAnthropicClient } from './api/anthropicClient.js'
 export { createSessionState, accumulateUsage, clearSession } from './state/SessionState.js'
+export {
+  BLINO_DIR_NAME,
+  BLINO_TILDE_ROOT,
+  BLINO_USER_SUB,
+  BLINO_PROJECT_SUB,
+  BLINO_CONFIG_FILE,
+  getUserHomeDir,
+  resolveUserBlinoPath,
+  resolveProjectBlinoPath,
+  joinUserBlinoPath,
+} from './constants/blinoPaths.js'
 export { runAgentLoop } from './engine/AgentEngine.js'
 export { agentLoop } from './engine/agentLoop.js'
+export { eventBus } from './events/EventBus.js'
+export { startHilFileBridge, writeHilSignalFromCli, getHilSessionFilePath } from './events/hilFileBridge.js'
+
+export type { WorkflowDef, WorkflowInput, NodeDef, WorkflowNodeSnapshot, AgentSnapshot } from './workflow/types.js'
+export { WorkflowRegistry, getWorkflowRegistry, loadWorkflowRegistry } from './workflow/WorkflowRegistry.js'
+export { runDagWorkflow } from './workflow/DAGEngine.js'
+export { getWorkflowSnapshotFilePath, getWorkflowSnapshotFilePathForRun, readWorkflowSnapshotFile } from './workflow/snapshotFile.js'
+export { runOrchestratorAgentLoop, getOrchestratorSystemPromptPreamble } from './workflow/OrchestratorAgent.js'
 export { checkToolPermission } from './permissions/engine.js'
 export { buildSystemPrompt, SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from './context/systemPrompt.js'
 export { findToolByName, getAllTools, registerTool, getAPIToolSchemas } from './tools/registry.js'
@@ -92,7 +111,7 @@ export { TodoWriteTool, getCurrentTodos, clearTodos } from './tools/interaction/
 export { AskUserTool } from './tools/interaction/AskUserTool.js'
 
 // Agent tools
-export { createAgentTool } from './tools/agent/AgentTool.js'
+export { createAgentTool, type AgentToolSuccessOutput } from './tools/agent/AgentTool.js'
 export { SendMessageTool } from './tools/agent/SendMessageTool.js'
 export { TaskStopTool } from './tools/agent/TaskStopTool.js'
 export { TaskOutputTool } from './tools/agent/TaskOutputTool.js'

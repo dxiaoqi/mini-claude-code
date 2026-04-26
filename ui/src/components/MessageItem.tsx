@@ -8,7 +8,7 @@ import { VisualRenderer } from './VisualRenderer'
 import { ProseMarkdown } from './ProseMarkdown'
 import { ToolCallCard, type ToolCallItem } from './ToolCallCard'
 import { exportMessageAsImage } from '@/lib/export-image'
-import type { ContentBlock } from '@/lib/types'
+import type { ContentBlock, WorkflowBubble as WorkflowBubbleT } from '@/lib/types'
 import { parseVisualBlocksFromText } from '@/lib/parse-visual-in-text'
 
 export type { ToolCallItem }
@@ -25,6 +25,15 @@ export interface ChatMessage {
   thinkText?: string
   artifactComplete?: boolean
   blocks?: ContentBlock[]
+  /** Workflow 气泡（P4） */
+  workflowBubble?: WorkflowBubbleT
+  /** 本消息承载一条可交互工作流（进度与参数写在消息内）；false 表示已提交、仅占位/结论 */
+  workflowHost?: boolean
+  /** 工作流已启动、等待完成（对应对话中占位，DAG 在侧栏/项目） */
+  workflowPlaceholder?: boolean
+  workflowComplete?: boolean
+  /** 与后台 WorkflowTask 对齐 */
+  workflowRunId?: string
 }
 
 export interface InProgressArtifact {
@@ -45,6 +54,8 @@ interface Props {
   isCurrentlyLoading?: boolean
   /** Current app mode — shown as badge on the avatar row */
   appMode?: 'agent' | 'artifacts'
+  /** 工作流卡片区（同一条助手消息内展示 DAG/表单，便于多次 workflow 都留在历史里） */
+  workflowSlot?: React.ReactNode
 }
 
 type ActionState = 'idle' | 'loading' | 'done'
@@ -211,7 +222,7 @@ function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[];
 
 // ─── MessageItem ──────────────────────────────────────────────────────────────
 
-export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }: Props) {
+export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode, workflowSlot }: Props) {
   const msgRef = useRef<HTMLDivElement>(null)
   const [hovered, setHovered] = useState(false)
   const [copyState, setCopyState] = useState<ActionState>('idle')
@@ -242,13 +253,25 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
     return parseVisualBlocksFromText(message.content ?? '') ?? []
   }, [isGenerating, inProgress?.blocks, message.blocks, message.content])
 
-  const showProseOnly = !hasArtifact && blockList.length === 0 && !!message.content?.trim()
+  const showProseOnly =
+    !hasArtifact &&
+    blockList.length === 0 &&
+    !!message.content?.trim() &&
+    !message.workflowHost &&
+    !message.workflowPlaceholder
+  const showWorkflowTitle =
+    !hasArtifact &&
+    blockList.length === 0 &&
+    !!message.content?.trim() &&
+    message.workflowHost &&
+    !message.workflowPlaceholder
 
   /** Per-message badge: visual output reads as Artifacts even if the global toggle is Agent. */
-  const badgeMode: 'agent' | 'artifacts' =
-    blockList.some(b => b.kind === 'visual') ||
-    (message.widgets?.length ?? 0) > 0 ||
-    planPhases.length > 0
+  const badgeMode: 'agent' | 'artifacts' | 'workflow' = message.workflowHost || message.workflowPlaceholder || message.workflowRunId
+    ? 'workflow'
+    : blockList.some(b => b.kind === 'visual') ||
+        (message.widgets?.length ?? 0) > 0 ||
+        planPhases.length > 0
       ? 'artifacts'
       : (appMode ?? 'artifacts')
 
@@ -335,18 +358,24 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
           </svg>
         </div>
         <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-          {badgeMode === 'artifacts' ? 'Artifacts' : 'Agent'}
+          {badgeMode === 'workflow' ? 'Workflow' : badgeMode === 'artifacts' ? 'Artifacts' : 'Agent'}
         </span>
         <span style={{
           fontSize: '10px',
           fontWeight: 500,
           padding: '1px 6px',
           borderRadius: 99,
-          background: badgeMode === 'artifacts' ? 'rgba(99,102,241,0.12)' : 'rgba(20,184,166,0.12)',
-          color: badgeMode === 'artifacts' ? '#818cf8' : '#2dd4bf',
+          background:
+            badgeMode === 'workflow'
+              ? 'rgba(24, 95, 165, 0.12)'
+              : badgeMode === 'artifacts'
+                ? 'rgba(99,102,241,0.12)'
+                : 'rgba(20,184,166,0.12)',
+          color:
+            badgeMode === 'workflow' ? '#185FA5' : badgeMode === 'artifacts' ? '#818cf8' : '#2dd4bf',
           letterSpacing: '0.02em',
         }}>
-          {badgeMode === 'artifacts' ? '⬡ Artifacts' : '⬡ Agent'}
+          {badgeMode === 'workflow' ? '⬡ Workflow' : badgeMode === 'artifacts' ? '⬡ Artifacts' : '⬡ Agent'}
         </span>
         {isGenerating && inProgress!.statusMessage && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '11px', color: 'var(--text-tertiary)' }}>
@@ -389,10 +418,36 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode }
           <ThinkBubble text={thinkText} />
         )}
 
+        {message.workflowPlaceholder && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              color: 'var(--text-secondary)',
+              fontSize: 13,
+              marginBottom: 8,
+            }}
+          >
+            <Loader2
+              width={16}
+              height={16}
+              style={{ color: 'var(--accent)', animation: 'spin-accent 0.8s linear infinite' }}
+            />
+            <span>{message.content}</span>
+          </div>
+        )}
+
         {/* ── Text (agent / conversational) ────────────────────────────── */}
         {showProseOnly && (
           <ProseMarkdown content={message.content} isStreaming={message.isStreaming} />
         )}
+        {showWorkflowTitle && (
+          <ProseMarkdown content={message.content} isStreaming={message.isStreaming} />
+        )}
+
+        {/* ── 工作流（同一条消息内的 DAG/表单，多次运行各自一条消息） ───── */}
+        {message.workflowHost && !message.workflowPlaceholder && workflowSlot}
 
         {/* ── Plan progress (Visual mode) ───────────────────────────────── */}
         {planPhases.length > 0 && (

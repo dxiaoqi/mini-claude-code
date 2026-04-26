@@ -4,12 +4,12 @@
  * 读写三级 JSON 配置，合并优先级与权限规则持久化。
  * 配置文件路径（与 Claude Code 对齐）：
  *
- *   全局级: ~/.blino/settings.json        (用户目录，跨项目)
- *   项目级: .blino/settings.json          (提交到 git，团队共享)
- *   本地级: .blino/settings.local.json    (不提交，覆盖项目配置)
+ *   全局级: <用户主目录>/<BLINO_DIR_NAME>/settings.json        (用户目录，跨项目)
+ *   项目级: <项目>/<BLINO_DIR_NAME>/settings.json            (提交到 git，团队共享)
+ *   本地级: <项目>/<BLINO_DIR_NAME>/settings.local.json      (不提交，覆盖项目配置)
  *
  * API Key 配置示例：
- *   ~/.blino/settings.json
+ *   见 `constants/blinoPaths`（BLINO_DIR_NAME）
  *   {
  *     "api": {
  *       "provider": "anthropic",
@@ -24,22 +24,22 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { resolve, dirname } from 'node:path'
+import { dirname } from 'node:path'
 import type { PermissionRule, Settings } from '../types.js'
+import { BLINO_CONFIG_FILE, resolveProjectBlinoPath, resolveUserBlinoPath } from '../constants/blinoPaths.js'
 
 // ── 路径 ──
 
 export function getUserConfigPath(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(home, '.blino', 'settings.json')
+  return resolveUserBlinoPath(BLINO_CONFIG_FILE.settings)
 }
 
 export function getProjectConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.blino', 'settings.json')
+  return resolveProjectBlinoPath(projectRoot, BLINO_CONFIG_FILE.settings)
 }
 
 export function getLocalConfigPath(projectRoot: string): string {
-  return resolve(projectRoot, '.blino', 'settings.local.json')
+  return resolveProjectBlinoPath(projectRoot, BLINO_CONFIG_FILE.settingsLocal)
 }
 
 // ── API Key 配置结构 ──

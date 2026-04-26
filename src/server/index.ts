@@ -13,6 +13,13 @@
  *   POST /api/sessions/:id/chat              — 发消息（SSE 流式返回）
  *   POST /api/sessions/:id/compact           — 手动压缩
  *   POST /api/permission/:requestId/respond  — 权限弹窗回调
+ *   GET  /workflow/list                       — 工作流列表
+ *   GET  /workflow/detail/:workflowId         — 单个工作流完整元数据（nodeIds / nodes）
+ *   POST /workflow/run                        — 启动工作流
+ *   GET  /workflow/events/:runId            — 工作流 SSE
+ *   POST /workflow/resume/:runId              — HIL 审批
+ *   GET  /workflow/snapshot/:runId            — 运行快照 JSON
+ *   GET  /workflow/list-running               — 当前运行中的 runId 列表
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -21,6 +28,7 @@ import { resolve, extname, join } from 'node:path'
 import { v4 as uuidv4 } from 'uuid'
 import { HttpServerAdapter } from '../adapters/http.js'
 import { createSessionState } from '../state/SessionState.js'
+import { BLINO_PROJECT_SUB, resolveProjectBlinoPath } from '../constants/blinoPaths.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript } from '../state/transcript.js'
@@ -28,6 +36,11 @@ import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/con
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { eventBus } from '../events/EventBus.js'
+import { loadWorkflowRegistry } from '../workflow/WorkflowRegistry.js'
+import { runDagWorkflow } from '../workflow/DAGEngine.js'
+import { topologicalOrder } from '../workflow/topo.js'
+import { getWorkflowSnapshotFilePathForRun } from '../workflow/snapshotFile.js'
 import type {
   APIClient,
   CanUseToolFn,
@@ -77,17 +90,42 @@ export interface ServerConfig {
 
 export function createBlinoServer(config: ServerConfig) {
   const sessions = new Map<string, SessionEntry>()
+  /** 并发工作流：runId -> workflowId，完成或异常时在 finally 中 delete */
+  const runningWorkflows = new Map<string, string>()
   /** Replaced after PUT /api/config so new API keys apply without restart */
   let liveApiClient: APIClient = config.apiClient
 
   // ── 工具函数 ──
 
+  /** 本地 Web UI 常见 Origin（与 localhost 不等价，浏览器 CORS 需逐字一致） */
+  const LOOPBACK_DEV_UI =
+    /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|::1)(:(3000|3002|5173|4173|8080))?(?:\/)?$/i
+
+  function pickAllowOrigin(requestOrigin: string): string {
+    const o = (requestOrigin || '').trim()
+    if (!o) {
+      return config.corsOrigin || '*'
+    }
+    if (config.corsOrigin && (o === config.corsOrigin || o.startsWith(config.corsOrigin + '/'))) {
+      return o
+    }
+    if (LOOPBACK_DEV_UI.test(o)) {
+      return o
+    }
+    return config.corsOrigin || '*'
+  }
+
   function cors(res: ServerResponse, origin: string): void {
-    const allowed = config.corsOrigin || '*'
+    const allowed = pickAllowOrigin(origin)
     res.setHeader('Access-Control-Allow-Origin', allowed)
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    // credentials 时 ACAO 不能是 *，须与请求 Origin 一致
+    if (allowed === '*') {
+      res.setHeader('Access-Control-Allow-Credentials', 'false')
+    } else {
+      res.setHeader('Access-Control-Allow-Credentials', 'true')
+    }
   }
 
   function json(res: ServerResponse, data: unknown, status = 200): void {
@@ -161,7 +199,10 @@ export function createBlinoServer(config: ServerConfig) {
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
-    const path = url.pathname
+    const path =
+      url.pathname.length > 1 && url.pathname.endsWith('/')
+        ? url.pathname.replace(/\/+$/, '')
+        : url.pathname
     const method = req.method?.toUpperCase() || 'GET'
     const origin = req.headers.origin || ''
 
@@ -505,7 +546,7 @@ export function createBlinoServer(config: ServerConfig) {
       return
     }
 
-    // ── POST /api/artifacts/save  (save visual block to .blino/artifacts/) ──
+    // ── POST /api/artifacts/save  (save visual block under project .blino/artifacts) ──
     if (method === 'POST' && path === '/api/artifacts/save') {
       try {
         const body = await readBody(req) as {
@@ -518,7 +559,7 @@ export function createBlinoServer(config: ServerConfig) {
 
         const { mkdir: mkdirFn, writeFile: writeFn } = await import('node:fs/promises')
         const { resolve: resolvePath } = await import('node:path')
-        const artifactsDir = resolvePath(config.cwd, '.blino', 'artifacts')
+        const artifactsDir = resolveProjectBlinoPath(config.cwd, BLINO_PROJECT_SUB.artifacts)
         await mkdirFn(artifactsDir, { recursive: true })
 
         const ext = body.visualType === 'svg' ? 'svg' : 'html'
@@ -553,6 +594,227 @@ export function createBlinoServer(config: ServerConfig) {
       }
 
       json(res, { ok: resolved })
+      return
+    }
+
+    // ── GET /workflow/list ──
+    if (method === 'GET' && path === '/workflow/list') {
+      try {
+        const registry = await loadWorkflowRegistry(config.cwd)
+        const workflows = registry.list().map(w => ({
+          id: w.id,
+          name: w.name,
+          description: w.description ?? '',
+          nodeCount: w.nodes.length,
+          nodeIds: topologicalOrder(w.nodes).map(n => n.id),
+          nodes: w.nodes.map(n => ({ id: n.id, dependsOn: [...(n.dependsOn ?? [])] })),
+          inputs: w.inputs?.map(i => ({ ...i })) ?? [],
+        }))
+        json(res, { workflows })
+      } catch (err) {
+        json(res, { error: (err as Error).message }, 500)
+      }
+      return
+    }
+
+    // ── GET /workflow/list-running ──
+    if (method === 'GET' && path === '/workflow/list-running') {
+      json(
+        res,
+        {
+          runs: [...runningWorkflows.entries()].map(([r, wid]) => ({ runId: r, workflowId: wid })),
+        },
+        200,
+      )
+      return
+    }
+
+    // ── GET /workflow/detail/:workflowId ──
+    const wfDetailMatch = path.match(/^\/workflow\/detail\/([^/]+)\/?$/)
+    if (method === 'GET' && wfDetailMatch) {
+      const workflowId = decodeURIComponent(wfDetailMatch[1])
+      try {
+        const registry = await loadWorkflowRegistry(config.cwd)
+        const w = registry.get(workflowId)
+        if (!w) {
+          json(res, { error: 'unknown_workflow' }, 404)
+          return
+        }
+        json(res, {
+          workflow: {
+            id: w.id,
+            name: w.name,
+            description: w.description ?? '',
+            nodeCount: w.nodes.length,
+            nodeIds: topologicalOrder(w.nodes).map(n => n.id),
+            nodes: w.nodes.map(n => ({ id: n.id, dependsOn: [...(n.dependsOn ?? [])] })),
+            inputs: w.inputs?.map(i => ({ ...i })) ?? [],
+          },
+        })
+      } catch (err) {
+        json(res, { error: (err as Error).message }, 500)
+      }
+      return
+    }
+
+    // ── POST /workflow/run ──
+    if (method === 'POST' && path === '/workflow/run') {
+      const body = await readBody(req) as {
+        workflowId?: string
+        sessionId?: string
+        inputValues?: Record<string, string>
+      }
+      const workflowId = body.workflowId
+      const sessionId = body.sessionId
+      const inputValues: Record<string, string> =
+        body.inputValues && typeof body.inputValues === 'object' && !Array.isArray(body.inputValues)
+          ? Object.fromEntries(
+              Object.entries(body.inputValues).map(([k, v]) => [k, v == null ? '' : String(v)]),
+            )
+          : {}
+      if (!workflowId || !sessionId) {
+        json(res, { error: 'workflowId and sessionId are required' }, 400)
+        return
+      }
+      const entry = sessions.get(sessionId)
+      if (!entry) {
+        json(res, { error: 'session_not_found' }, 404)
+        return
+      }
+      const registry = await loadWorkflowRegistry(config.cwd)
+      const def = registry.get(workflowId)
+      if (!def) {
+        json(res, { error: 'unknown_workflow' }, 404)
+        return
+      }
+      const missing: string[] = []
+      for (const inp of def.inputs ?? []) {
+        if (inp.required && !String(inputValues[inp.id] ?? '').trim()) {
+          missing.push(inp.id)
+        }
+      }
+      if (missing.length > 0) {
+        json(res, { error: 'missing_required_inputs', missing }, 400)
+        return
+      }
+      const runId = uuidv4()
+      // 与聊天会话隔离：并发的多个 workflow 不共享同一份 sessionState（避免 workflowSnapshot / subAgent 竞态）
+      const wfState = createSessionState({
+        cwd: entry.state.cwd,
+        projectRoot: entry.state.projectRoot,
+        settings: { ...entry.state.settings, model: entry.state.model },
+      })
+      wfState.sessionId = `wf-${runId}`
+      wfState.permissionMode = entry.state.permissionMode
+      wfState.permissionRules = [...(entry.state.permissionRules ?? [])]
+
+      runningWorkflows.set(runId, workflowId)
+
+      const onLog = (s: string) => {
+        // eslint-disable-next-line no-console
+        console.log(s)
+      }
+
+      void (async () => {
+        try {
+          await runDagWorkflow({
+            def,
+            state: wfState,
+            apiClient: entry.apiClient,
+            tools: entry.tools,
+            contextProviders: entry.contextProviders,
+            onLog,
+            runId,
+            hilMode: 'http',
+            inputValues,
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          eventBus.emit('workflow_event', {
+            id: runId,
+            type: 'workflow_error',
+            runId,
+            nodeId: '',
+            error: msg,
+          })
+          eventBus.emit('workflow_event', {
+            id: runId,
+            type: 'workflow_complete',
+            runId,
+            status: 'failed',
+          })
+        } finally {
+          runningWorkflows.delete(runId)
+        }
+      })()
+
+      json(res, { runId, workflowId, status: 'started' })
+      return
+    }
+
+    // ── GET /workflow/events/:runId (SSE) ──
+    const wfEventsMatch = path.match(/^\/workflow\/events\/([^/]+)$/)
+    if (method === 'GET' && wfEventsMatch) {
+      const runId = wfEventsMatch[1]
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+      type WfPayload = { id: string; [k: string]: unknown }
+      const handler = (payload: WfPayload) => {
+        if (payload.id !== runId) return
+        try {
+          res.write(`data: ${JSON.stringify(payload)}\n\n`)
+        } catch {
+          // response closed
+        }
+      }
+      eventBus.on('workflow_event', handler)
+      req.on('close', () => {
+        eventBus.off('workflow_event', handler)
+      })
+      return
+    }
+
+    // ── POST /workflow/resume/:runId ──
+    const wfResumeMatch = path.match(/^\/workflow\/resume\/([^/]+)$/)
+    if (method === 'POST' && wfResumeMatch) {
+      const runId = wfResumeMatch[1]
+      const body = await readBody(req) as {
+        decision?: 'approve' | 'reject'
+        nodeId?: string
+      }
+      const nodeId = body.nodeId
+      const decision = body.decision
+      if (!nodeId || (decision !== 'approve' && decision !== 'reject')) {
+        json(res, { error: 'nodeId and decision (approve|reject) required' }, 400)
+        return
+      }
+      const matchId = `${runId}#${nodeId}`
+      eventBus.emit('workflow_hil_resume', {
+        id: matchId,
+        runId,
+        nodeId,
+        decision,
+      })
+      json(res, { ok: true })
+      return
+    }
+
+    // ── GET /workflow/snapshot/:runId ──
+    const wfSnapMatch = path.match(/^\/workflow\/snapshot\/([^/]+)$/)
+    if (method === 'GET' && wfSnapMatch) {
+      const runId = wfSnapMatch[1]
+      try {
+        const p = getWorkflowSnapshotFilePathForRun(config.cwd, runId)
+        const raw = await readFile(p, 'utf-8')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(raw)
+      } catch {
+        notFound(res)
+      }
       return
     }
 

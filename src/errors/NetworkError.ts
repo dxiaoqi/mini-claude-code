@@ -5,6 +5,7 @@
  */
 import { BlinoError, ErrorCategory, ErrorContext, SuggestedAction } from './BlinoError.js'
 import type { ErrorMetadata } from './types.js'
+import { BLINO_TILDE_ROOT } from '../constants/blinoPaths.js'
 
 export class NetworkError extends BlinoError {
   constructor(
@@ -17,7 +18,7 @@ export class NetworkError extends BlinoError {
     if (statusCode === 401) {
       suggestedActions.push({
         title: 'Check API Key',
-        description: 'Verify your API key is correct in ~/.blino/settings.json',
+        description: `Verify your API key is correct in ${BLINO_TILDE_ROOT}/settings.json`,
       })
     } else if (statusCode === 429) {
       suggestedActions.push({

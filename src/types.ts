@@ -4,6 +4,7 @@
  * 定义 Message、Tool、Permission、State、StreamEvent、ContextProvider、UIAdapter 等公共类型与接口。
  */
 import type { z } from 'zod'
+import type { AgentSnapshot, WorkflowNodeSnapshot } from './workflow/types.js'
 
 // ────────────────────────────────────────────
 //  Message Types
@@ -103,6 +104,8 @@ export interface ToolContext {
   mcpManager?: { getAllConnections(): unknown[] }
   /** Logger instance for structured logging */
   logger?: unknown
+  /** 由 DAGEngine 注入：当前 workflow 节点 id，子 Agent 快照可关联到节点 */
+  workflowNodeId?: string
 }
 
 export type CanUseToolFn = (
@@ -302,7 +305,7 @@ export interface Settings {
   systemPromptAddendum?: string
   /**
    * 开发模式 trace：启用后将完整会话事件流（消息、工具调用、token 用量等）
-   * 写入 ~/.blino/projects/<hash>/<sessionId>.trace.jsonl，用于评测与迭代。
+   * 写入用户主目录下 Blino projects/<hash>/<sessionId>.trace.jsonl（见 constants/blinoPaths），用于评测与迭代。
    * 可通过 --dev CLI flag 或在 settings.json 中设置 "devTrace": true 启用。
    */
   devTrace?: boolean
@@ -351,6 +354,22 @@ export interface SessionState {
   model: string
   fallbackModel?: string
   settings: Settings
+  /**
+   * Human-in-the-loop：权限 ask 下适配器返回 pending 或外部信令时置位；下一轮模型调用前在 agentLoop 中挂起，直到 hil_resume（或跨进程信令经文件桥接）。
+   */
+  hilPending: boolean
+  /**
+   * 工作流 DAG 执行时各节点状态与输出（由 DAGEngine 写入，并持久化到 snapshot.json）
+   */
+  workflowSnapshot?: Record<string, WorkflowNodeSnapshot>
+  /**
+   * AgentTool 子 agent 一次运行的快照：messages 摘要 + usage + 结果/错误（与 snapshot.json 的 subAgentSnapshots 对应）
+   */
+  workflowSubAgentSnapshots?: Record<string, AgentSnapshot>
+  /**
+   * Orchestrator 主 agent 模式：在 buildSystemPrompt 中注入调度职责说明（由 OrchestratorAgent 设置）
+   */
+  orchestratorSystemPreamble?: string
 }
 
 // ────────────────────────────────────────────
@@ -414,6 +433,8 @@ export type PermissionResponse =
   | { decision: 'allow' }
   | { decision: 'allow_always' }
   | { decision: 'deny' }
+  /** 适配器不阻塞：由 HIL 在 agentLoop 中挂起，进程内 eventBus + 文件桥接恢复 */
+  | { decision: 'pending' }
 
 export interface UIAdapter {
   onStreamEvent(event: StreamEvent): void

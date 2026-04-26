@@ -163,8 +163,17 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
 
         const delta = choice.delta
 
-        if (delta?.content) {
-          yield { type: 'text_delta', text: delta.content }
+        if (delta?.content != null && delta.content !== '') {
+          const c = delta.content as string | ReadonlyArray<{ type?: string; text?: string }>
+          if (typeof c === 'string') {
+            yield { type: 'text_delta', text: c }
+          } else if (Array.isArray(c)) {
+            for (const part of c) {
+              if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string' && part.text) {
+                yield { type: 'text_delta', text: part.text }
+              }
+            }
+          }
         }
 
         if (delta?.tool_calls) {

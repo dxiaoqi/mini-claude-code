@@ -57,6 +57,7 @@ import { formatCost, formatTokens, estimateCost } from './utils/cost.js'
 import type { APIClient, ContextProvider, Message, Settings, Tool } from './types.js'
 import { createLogger } from './logging/index.js'
 import chalk from 'chalk'
+import { BLINO_TILDE_ROOT } from './constants/blinoPaths.js'
 
 const VERSION = '0.1.0'
 
@@ -77,7 +78,7 @@ program
   .name('blino')
   .description('Blino — AI coding assistant')
   .version(VERSION)
-  .option('--api-key <key>', 'API key (reads from ~/.blino/settings.json if not set)')
+  .option('--api-key <key>', `API key (reads from ${BLINO_TILDE_ROOT}/settings.json if not set)`)
   .option('--base-url <url>', 'API base URL')
   .option('--model <model>', 'Model name')
   .option('--provider <type>', 'API provider: anthropic or openai (auto-detected)')
@@ -91,11 +92,67 @@ program
   .option('--host <host>', 'HTTP server host (default: localhost)')
   .option('--cors-origin <origin>', 'CORS allowed origin for web UI')
   .option('--config', 'Show current effective configuration')
-  .option('--dev', 'Dev mode: record full session trace (messages, tool calls, tokens) to ~/.blino/projects/<hash>/<sessionId>.trace.jsonl')
+  .option(
+    '--dev',
+    `Dev mode: record full session trace (messages, tool calls, tokens) to ${BLINO_TILDE_ROOT}/projects/<hash>/<sessionId>.trace.jsonl`,
+  )
+  .option(
+    '--emit <event> <sessionId>',
+    'HIL: write signal file for a running blino (hil_resume | hil_suspend, or resume | suspend)',
+  )
+  .option(
+    '--workflow <action> [workflowId]',
+    'Workflow: list; or run <id> [--fresh] to ignore saved snapshot and re-run all nodes',
+  )
   .argument('[prompt]', 'Initial prompt (or pipe via stdin with -p)')
 
 program.action(async (prompt: string | undefined, options: Record<string, unknown>) => {
+  // ── 跨进程 HIL 信令（不依赖主进程的 API 配置）──
+  const argv = process.argv
+  const emitIdx = argv.indexOf('--emit')
+  if (emitIdx >= 0) {
+    const eventName = argv[emitIdx + 1]
+    const sessionId = argv[emitIdx + 2]
+    if (!eventName || !sessionId) {
+      console.error(chalk.red('Usage: blino --emit <hil_resume|hil_suspend> <sessionId>'))
+      process.exit(1)
+    }
+    if (eventName !== 'hil_resume' && eventName !== 'hil_suspend' && eventName !== 'resume' && eventName !== 'suspend') {
+      console.error(chalk.red(`Unknown HIL event: ${eventName} (use hil_resume or hil_suspend)`))
+      process.exit(1)
+    }
+    const line = eventName === 'resume' ? 'hil_resume' : eventName === 'suspend' ? 'hil_suspend' : eventName
+    const { writeHilSignalFromCli } = await import('./events/hilFileBridge.js')
+    await writeHilSignalFromCli(line, sessionId)
+    console.log(chalk.dim(`[hil] signal written: ${line} → ${BLINO_TILDE_ROOT}/hil/${sessionId}`))
+    process.exit(0)
+  }
+
   const cwd = process.cwd()
+
+  // ── 工作流：list 无需 API；run 在子模块内解析 API ──
+  const wIdx = argv.indexOf('--workflow')
+  if (wIdx >= 0) {
+    const sub = argv[wIdx + 1]
+    if (sub === 'list') {
+      const { runWorkflowList } = await import('./workflow/runWorkflowCli.js')
+      await runWorkflowList(cwd)
+      process.exit(0)
+    }
+    if (sub === 'run') {
+      const wid = argv[wIdx + 2]
+      if (!wid || wid.startsWith('--')) {
+        console.error(chalk.red('Usage: blino --workflow run <workflowId> [--fresh]'))
+        process.exit(1)
+      }
+      const fresh = argv.slice(wIdx + 3).includes('--fresh')
+      const { runWorkflowRun } = await import('./workflow/runWorkflowCli.js')
+      await runWorkflowRun(cwd, wid, { fresh })
+      process.exit(0)
+    }
+    console.error(chalk.red('Usage: blino --workflow list | blino --workflow run <id> [--fresh]'))
+    process.exit(1)
+  }
 
   // ── --config: 显示当前有效配置 ──
   if (options.config) {
@@ -116,7 +173,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   if (!apiKey) {
     console.error(chalk.red('Error: API key is required.'))
     console.error(chalk.dim('Set it via:'))
-    console.error(chalk.dim('  1. ~/.blino/settings.json  →  { "api": { "anthropicApiKey": "..." } }'))
+    console.error(chalk.dim(`  1. ${BLINO_TILDE_ROOT}/settings.json  →  { "api": { "anthropicApiKey": "..." } }`))
     console.error(chalk.dim('  2. Environment variable ANTHROPIC_API_KEY or OPENAI_API_KEY'))
     console.error(chalk.dim('  3. CLI flag --api-key'))
     process.exit(1)
@@ -141,7 +198,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   } else {
     if (!baseURL) {
       console.error(chalk.red('Error: API base URL is required for OpenAI compatible provider.'))
-      console.error(chalk.dim('Set it via openaiBaseUrl in ~/.blino/settings.json or OPENAI_BASE_URL env.'))
+      console.error(chalk.dim(`Set it via openaiBaseUrl in ${BLINO_TILDE_ROOT}/settings.json or OPENAI_BASE_URL env.`))
       process.exit(1)
     }
     baseClient = createOpenAICompatibleClient({
@@ -859,16 +916,16 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
         console.log(chalk.green(`Model set to: ${value}`))
       } else if (key === 'api.anthropicApiKey') {
         await saveApiConfig('user', cwd, { anthropicApiKey: value })
-        console.log(chalk.green('Saved anthropicApiKey to ~/.blino/settings.json'))
+        console.log(chalk.green(`Saved anthropicApiKey to ${BLINO_TILDE_ROOT}/settings.json`))
       } else if (key === 'api.anthropicBaseUrl') {
         await saveApiConfig('user', cwd, { anthropicBaseUrl: value })
-        console.log(chalk.green('Saved anthropicBaseUrl to ~/.blino/settings.json'))
+        console.log(chalk.green(`Saved anthropicBaseUrl to ${BLINO_TILDE_ROOT}/settings.json`))
       } else if (key === 'api.openaiApiKey') {
         await saveApiConfig('user', cwd, { openaiApiKey: value })
-        console.log(chalk.green('Saved openaiApiKey to ~/.blino/settings.json'))
+        console.log(chalk.green(`Saved openaiApiKey to ${BLINO_TILDE_ROOT}/settings.json`))
       } else if (key === 'api.model') {
         await saveApiConfig('user', cwd, { model: value })
-        console.log(chalk.green(`Saved default model to ~/.blino/settings.json`))
+        console.log(chalk.green(`Saved default model to ${BLINO_TILDE_ROOT}/settings.json`))
       } else {
         console.log(chalk.yellow(`Unknown config key: ${key}`))
         console.log(chalk.dim('Available: model, api.anthropicApiKey, api.anthropicBaseUrl, api.openaiApiKey, api.model'))

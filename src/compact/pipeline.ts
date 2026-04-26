@@ -12,7 +12,7 @@
  *
  * Session Memory：
  *   每次 summaryCompact 触发后，自动将摘要+元数据持久化到
- *   ~/.blino/memory/<hash>/memory.json，供后续会话参考。
+ *   用户主目录下 Blino memory/<hash>/memory.json（见 blinoPaths），供后续会话参考。
  */
 
 import type { APIClient, Message, SessionState } from '../types.js'

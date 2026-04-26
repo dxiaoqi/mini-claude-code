@@ -5,7 +5,14 @@ import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings } f
 import { MessageItem, type ChatMessage, type InProgressArtifact, type ToolCallItem } from '@/components/MessageItem'
 import { type WidgetState } from '@/components/WidgetRenderer'
 import { type PlanPhase } from '@/components/PlanProgress'
-import { type ContentBlock } from '@/lib/types'
+import { type ContentBlock, type WorkflowSummary, type WorkflowTask, type WorkflowToast } from '@/lib/types'
+import { WorkflowDAGCard } from '@/components/workflow/WorkflowDAGCard'
+import { WorkflowToastStack } from '@/components/WorkflowToastStack'
+import { ProjectPanel, ProjectPanelHeaderButton } from '@/components/ProjectPanel'
+import { listWorkflows, getWorkflowDetail } from '@/lib/workflow-client'
+import { workflowManager } from '@/lib/workflow-manager'
+import { SlashMenu } from '@/components/slash/SlashMenu'
+import { topologicalNodeIds } from '@/lib/workflow-topo'
 import {
   exportConversationJson,
   exportConversationAsImage,
@@ -17,6 +24,14 @@ import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
+
+/** 未提交前：仅表单元数据（运行态在 workflowManager） */
+type WorkflowFormDraft = {
+  workflow: WorkflowSummary
+  formValues: Record<string, string>
+  formErrors: Record<string, string>
+  formSubmitting: boolean
+}
 
 const BLINO_URL = process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'
 
@@ -202,6 +217,33 @@ export default function HomePage() {
   /** Server session id for current mode — drives SessionMenu highlight */
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowSummary[]>([])
+  /** 失焦时隐藏 / 菜单，避免仅靠 input 无法收起 */
+  const [slashMenuSuppressed, setSlashMenuSuppressed] = useState(false)
+  const showSlashMenu = input.startsWith('/') && !slashMenuSuppressed
+
+  const messagesRef = useRef<ChatMessage[]>([])
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  const [workflowFormDrafts, setWorkflowFormDrafts] = useState<Record<string, WorkflowFormDraft>>({})
+  const [workflowTasks, setWorkflowTasks] = useState<WorkflowTask[]>([])
+  const [workflowToasts, setWorkflowToasts] = useState<WorkflowToast[]>([])
+  const [projectPanelOpen, setProjectPanelOpen] = useState(false)
+  const workflowDoneToastRef = useRef<Set<string>>(new Set())
+  const workflowErrToastRef = useRef<Set<string>>(new Set())
+  const workflowHilToastSeenRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    void listWorkflows()
+      .then(setAvailableWorkflows)
+      .catch(() => { setAvailableWorkflows([]) })
+  }, [])
+
+  useEffect(() => {
+    return workflowManager.subscribe(setWorkflowTasks)
+  }, [])
 
   // Refs
   const messagesRootRef = useRef<HTMLDivElement>(null)
@@ -314,6 +356,295 @@ export default function HomePage() {
     setMessages(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m))
   }, [])
 
+  useEffect(() => {
+    for (const t of workflowTasks) {
+      const h = t.dagState?.hilState
+      if (h && !h.decided && h.nodeId) {
+        const key = `${t.runId}#${h.nodeId}`
+        if (workflowHilToastSeenRef.current.has(key)) continue
+        workflowHilToastSeenRef.current.add(key)
+        setWorkflowToasts(prev => [
+          ...prev,
+          {
+            id: `hil-${t.runId}-${h.nodeId}`,
+            type: 'hil',
+            runId: t.runId,
+            workflowName: t.workflowName,
+            nodeId: h.nodeId,
+            question: h.question,
+            options: h.options,
+          },
+        ])
+      }
+    }
+  }, [workflowTasks])
+
+  useEffect(() => {
+    for (const t of workflowTasks) {
+      if (t.status === 'done' && !workflowDoneToastRef.current.has(t.runId)) {
+        workflowDoneToastRef.current.add(t.runId)
+        const body = t.finalResult?.trim() ? t.finalResult : '_（无文本输出）_'
+        updateMessage(t.messageId, {
+          workflowPlaceholder: false,
+          workflowComplete: true,
+          content: `✓ **${t.workflowName}** 完成\n\n${body}`,
+          workflowRunId: t.runId,
+        })
+        setWorkflowToasts(prev => [
+          ...prev,
+          {
+            id: `done-${t.runId}`,
+            type: 'done',
+            runId: t.runId,
+            workflowName: t.workflowName,
+            autoCloseMs: 3000,
+          },
+        ])
+      } else if (t.status === 'failed' && !workflowErrToastRef.current.has(t.runId)) {
+        workflowErrToastRef.current.add(t.runId)
+        const errText = t.lastError || t.dagState?.globalError || '工作流失败'
+        updateMessage(t.messageId, {
+          workflowPlaceholder: false,
+          content: `**${t.workflowName}** 已失败\n\n${errText}`,
+          workflowRunId: t.runId,
+        })
+        setWorkflowToasts(prev => [
+          ...prev,
+          {
+            id: `err-${t.runId}`,
+            type: 'error',
+            runId: t.runId,
+            workflowName: t.workflowName,
+            errorMessage: errText,
+            autoCloseMs: 5000,
+          },
+        ])
+      }
+    }
+  }, [workflowTasks, updateMessage])
+
+  const appendSystemBubble = useCallback(
+    (text: string) => {
+      addMessage({ role: 'assistant', content: text, isStreaming: false })
+    },
+    [addMessage],
+  )
+
+  const resolveBlinoSessionId = useCallback(async (): Promise<string | null> => {
+    const m = modeRef.current
+    const sessionRef = m === 'agent' ? agentSessionIdRef : artifactsSessionIdRef
+    if (sessionRef.current) return sessionRef.current
+    if (m === 'artifacts' && artifactsSessionPromiseRef.current) {
+      await artifactsSessionPromiseRef.current
+    }
+    if (sessionRef.current) return sessionRef.current
+    try {
+      const sessRes = await fetch(`${BLINO_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!sessRes.ok) return null
+      const sessData = await sessRes.json()
+      const id = (sessData.session?.id as string) || null
+      sessionRef.current = id
+      if (id) setActiveSessionId(id)
+      return id
+    } catch {
+      return null
+    }
+  }, [])
+
+  const handleFormSubmit = useCallback(
+    async (messageId: string, workflow: WorkflowSummary, values: Record<string, string>) => {
+      const errors: Record<string, string> = {}
+      for (const input of workflow.inputs ?? []) {
+        if (input.required && !values[input.id]?.trim()) {
+          errors[input.id] = `${input.label} 不能为空`
+        }
+      }
+      if (Object.keys(errors).length > 0) {
+        setWorkflowFormDrafts(prev => {
+          const c = prev[messageId]
+          if (!c) return prev
+          return { ...prev, [messageId]: { ...c, formErrors: errors } }
+        })
+        return
+      }
+
+      setWorkflowFormDrafts(prev => {
+        const c = prev[messageId]
+        if (!c) return prev
+        return { ...prev, [messageId]: { ...c, formErrors: {}, formSubmitting: true } }
+      })
+      const sessionId = await resolveBlinoSessionId()
+      if (!sessionId) {
+        setWorkflowFormDrafts(prev => {
+          const c = prev[messageId]
+          if (!c) return prev
+          return { ...prev, [messageId]: { ...c, formSubmitting: false } }
+        })
+        appendSystemBubble('无法建立 Blino 会话，请重试。')
+        return
+      }
+
+      let graphNodes: Array<{ id: string; dependsOn: string[] }> =
+        workflow.nodes?.length > 0
+          ? workflow.nodes
+          : (workflow.nodeIds ?? []).map(id => ({ id, dependsOn: [] as string[] }))
+      let orderIds: string[] = workflow.nodeIds?.length
+        ? workflow.nodeIds
+        : graphNodes.length
+          ? topologicalNodeIds(graphNodes)
+          : []
+      if (orderIds.length === 0) {
+        const full = await getWorkflowDetail(workflow.id)
+        if (full) {
+          graphNodes =
+            full.nodes?.length > 0
+              ? full.nodes
+              : (full.nodeIds ?? []).map(id => ({ id, dependsOn: [] as string[] }))
+          orderIds = full.nodeIds?.length
+            ? full.nodeIds
+            : graphNodes.length
+              ? topologicalNodeIds(graphNodes)
+              : []
+        }
+      }
+      if (orderIds.length === 0) {
+        setWorkflowFormDrafts(prev => {
+          const c = prev[messageId]
+          if (!c) return prev
+          return { ...prev, [messageId]: { ...c, formSubmitting: false } }
+        })
+        appendSystemBubble(
+          '工作流无节点元数据。请确认：① 在含 .blino/workflows/ 的目录执行 blino；' +
+            '② UI 的 NEXT_PUBLIC_BLINO_URL 指向该实例；③ 或升级 blino 后重试。',
+        )
+        return
+      }
+
+      let runId: string
+      try {
+        runId = await workflowManager.start({ workflow, sessionId, inputValues: values, messageId })
+      } catch (e) {
+        setWorkflowFormDrafts(prev => {
+          const c = prev[messageId]
+          if (!c) return prev
+          return { ...prev, [messageId]: { ...c, formSubmitting: false } }
+        })
+        appendSystemBubble(`启动失败：${(e as Error).message}`)
+        return
+      }
+
+      updateMessage(messageId, {
+        workflowHost: false,
+        workflowPlaceholder: true,
+        workflowRunId: runId,
+        content: `⬡ ${workflow.name} · 运行中…`,
+        isStreaming: false,
+      })
+      setWorkflowFormDrafts(prev => {
+        const n = { ...prev }
+        delete n[messageId]
+        return n
+      })
+    },
+    [appendSystemBubble, updateMessage, resolveBlinoSessionId],
+  )
+
+  const handleWorkflowSelect = useCallback(
+    async (wf: WorkflowSummary) => {
+      setInput('')
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      setSlashMenuSuppressed(true)
+
+      let graphNodes: Array<{ id: string; dependsOn: string[] }> =
+        wf.nodes?.length > 0
+          ? wf.nodes
+          : (wf.nodeIds ?? []).map(id => ({ id, dependsOn: [] as string[] }))
+      let orderIds: string[] = wf.nodeIds?.length
+        ? wf.nodeIds
+        : graphNodes.length
+          ? topologicalNodeIds(graphNodes)
+          : []
+      let merged: WorkflowSummary = { ...wf }
+      if (orderIds.length === 0) {
+        const full = await getWorkflowDetail(wf.id)
+        if (full) {
+          merged = {
+            ...wf,
+            ...full,
+            name: full.name || wf.name,
+            description: full.description ?? wf.description,
+            inputs: full.inputs?.length ? full.inputs : wf.inputs,
+            nodeIds: full.nodeIds?.length ? full.nodeIds : wf.nodeIds,
+            nodes: full.nodes?.length ? full.nodes : wf.nodes,
+            nodeCount: full.nodeCount ?? wf.nodeCount,
+          }
+          graphNodes =
+            merged.nodes?.length > 0
+              ? merged.nodes
+              : (merged.nodeIds ?? []).map(id => ({ id, dependsOn: [] as string[] }))
+          orderIds = merged.nodeIds?.length
+            ? merged.nodeIds
+            : graphNodes.length
+              ? topologicalNodeIds(graphNodes)
+              : []
+        }
+      }
+      if (orderIds.length === 0) {
+        appendSystemBubble(
+          '工作流无节点元数据。请确认：① 在含 .blino/workflows/ 的目录执行 blino；' +
+            '② UI 的 NEXT_PUBLIC_BLINO_URL 指向该实例；③ 或升级 blino 后重试。',
+        )
+        return
+      }
+
+      const defaults: Record<string, string> = {}
+      for (const input of merged.inputs ?? []) {
+        if (input.default) defaults[input.id] = input.default
+      }
+
+      const msgId = addMessage({
+        role: 'assistant',
+        content: `工作流：**${merged.name}**`,
+        workflowHost: true,
+        isStreaming: false,
+      })
+      setWorkflowFormDrafts(prev => ({
+        ...prev,
+        [msgId]: {
+          workflow: merged,
+          formValues: defaults,
+          formErrors: {},
+          formSubmitting: false,
+        },
+      }))
+
+      if (!merged.inputs || merged.inputs.length === 0) {
+        void handleFormSubmit(msgId, merged, {})
+      }
+    },
+    [appendSystemBubble, handleFormSubmit, addMessage],
+  )
+
+  const handleWorkflowToastHil = useCallback(
+    async (toastId: string, runId: string, nodeId: string, decision: 'approve' | 'reject') => {
+      try {
+        await workflowManager.decide(runId, nodeId, decision)
+        setWorkflowToasts(prev => prev.filter(t => t.id !== toastId))
+      } catch {
+        appendSystemBubble('无法发送工作流决策，请重试')
+      }
+    },
+    [appendSystemBubble],
+  )
+
+  const dismissWorkflowToast = useCallback((id: string) => {
+    setWorkflowToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   const fetchVisualContextBody = useCallback(async (): Promise<string | undefined> => {
     try {
       const ctxRes = await fetch(`${BLINO_URL}/api/visual-context`)
@@ -329,6 +660,12 @@ export default function HomePage() {
     if (isLoading) return
     abortRef.current?.abort()
     resetInProgress()
+    workflowManager.reset()
+    workflowDoneToastRef.current = new Set()
+    workflowErrToastRef.current = new Set()
+    workflowHilToastSeenRef.current = new Set()
+    setWorkflowToasts([])
+    setWorkflowFormDrafts({})
     setMessages([])
     setIsLoading(false)
     currentAssistantMsgIdRef.current = null
@@ -373,6 +710,12 @@ export default function HomePage() {
     if (isLoading) return
     abortRef.current?.abort()
     resetInProgress()
+    workflowManager.reset()
+    workflowDoneToastRef.current = new Set()
+    workflowErrToastRef.current = new Set()
+    workflowHilToastSeenRef.current = new Set()
+    setWorkflowToasts([])
+    setWorkflowFormDrafts({})
     setIsLoading(false)
     currentAssistantMsgIdRef.current = null
 
@@ -944,8 +1287,10 @@ export default function HomePage() {
   const handleSubmit = useCallback(async (overrideText?: string) => {
     const userText = (overrideText ?? input).trim()
     if (!userText || isLoading) return
+    if (userText === '/' || (overrideText == null && showSlashMenu)) return
     // Ensure modeRef is always in sync before processing events for this turn
     modeRef.current = mode
+
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
@@ -1015,18 +1360,31 @@ export default function HomePage() {
       setIsLoading(false)
       setInProgressStatusMessage('')
     }
-  }, [input, isLoading, mode, addMessage, updateMessage, processEvent, resetInProgress, streamSSE, modeRef])
+  }, [input, isLoading, mode, addMessage, updateMessage, processEvent, resetInProgress, streamSSE, modeRef, showSlashMenu])
 
   // Keep ref current so the sendPrompt handler (declared before handleSubmit)
   // always calls the latest closure (with up-to-date isLoading etc.).
   handleSubmitRef.current = handleSubmit
 
   const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isLoading && input.trim()) handleSubmit() }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (showSlashMenu) {
+        e.preventDefault()
+        return
+      }
+      e.preventDefault()
+      if (!isLoading && input.trim()) handleSubmit()
+    }
   }
 
   const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
+    const v = e.target.value
+    setInput(v)
+    if (v.startsWith('/')) {
+      setSlashMenuSuppressed(false)
+    } else {
+      setSlashMenuSuppressed(false)
+    }
     const el = e.target
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 160) + 'px'
@@ -1093,6 +1451,10 @@ export default function HomePage() {
             done={imgExportState === 'done'}
             onClick={handleImgExport}
           />
+          <ProjectPanelHeaderButton
+            runningCount={workflowTasks.filter(t => t.status === 'running').length}
+            onClick={() => { setProjectPanelOpen(o => !o) }}
+          />
           <SessionMenu
             blinoUrl={BLINO_URL}
             disabled={isLoading}
@@ -1117,7 +1479,16 @@ export default function HomePage() {
       </header>
 
       {/* ── Messages ────────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          marginRight: projectPanelOpen ? 380 : 0,
+          transition: 'margin-right 0.2s ease',
+        }}
+      >
         <div
           ref={messagesRootRef}
           style={{ maxWidth: 760, margin: '0 auto', padding: '28px 20px 12px' }}
@@ -1132,19 +1503,59 @@ export default function HomePage() {
             </div>
           )}
 
-          {messages.map(msg => (
-            <MessageItem
-              key={msg.id}
-              message={msg}
-              isCurrentlyLoading={msg.id === currentAssistantMsgIdRef.current && isLoading}
-              appMode={msg.role === 'assistant' ? mode : undefined}
-              inProgress={
-                msg.id === currentAssistantMsgIdRef.current && isLoading
-                  ? currentInProgress
-                  : undefined
-              }
-            />
-          ))}
+          {messages.map(msg => {
+            const cell = msg.workflowHost ? workflowFormDrafts[msg.id] : undefined
+            return (
+              <MessageItem
+                key={msg.id}
+                message={msg}
+                isCurrentlyLoading={msg.id === currentAssistantMsgIdRef.current && isLoading}
+                appMode={msg.role === 'assistant' ? mode : undefined}
+                inProgress={
+                  msg.id === currentAssistantMsgIdRef.current && isLoading
+                    ? currentInProgress
+                    : undefined
+                }
+                workflowSlot={
+                  msg.workflowHost && cell ? (
+                    <WorkflowDAGCard
+                      docked
+                      workflow={cell.workflow}
+                      dagState={null}
+                      formValues={cell.formValues}
+                      formErrors={cell.formErrors}
+                      formSubmitting={cell.formSubmitting}
+                      onFormChange={(fid, val) => {
+                        setWorkflowFormDrafts(prev => {
+                          const c = prev[msg.id]
+                          if (!c) return prev
+                          return {
+                            ...prev,
+                            [msg.id]: { ...c, formValues: { ...c.formValues, [fid]: val } },
+                          }
+                        })
+                      }}
+                      onFormSubmit={() => { void handleFormSubmit(msg.id, cell.workflow, cell.formValues) }}
+                      onFormCancel={() => {
+                        const t = workflowTasks.find(x => x.messageId === msg.id)
+                        if (t?.status === 'running') {
+                          appendSystemBubble('请等待工作流完成后再从对话中移除。')
+                          return
+                        }
+                        setMessages(prev => prev.filter(m => m.id !== msg.id))
+                        setWorkflowFormDrafts(prev => {
+                          const n = { ...prev }
+                          delete n[msg.id]
+                          return n
+                        })
+                      }}
+                      onHILDecide={() => {}}
+                    />
+                  ) : undefined
+                }
+              />
+            )
+          })}
 
           <div ref={bottomRef} />
         </div>
@@ -1157,7 +1568,34 @@ export default function HomePage() {
         padding: '14px 20px 16px',
         background: 'var(--bg-primary)',
       }}>
-        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', position: 'relative' }}>
+          {showSlashMenu && (
+            <SlashMenu
+              query={input.startsWith('/') ? input.slice(1) : ''}
+              workflows={availableWorkflows}
+              onSelectWorkflow={handleWorkflowSelect}
+              onSelectSession={action => {
+                if (action === 'new') {
+                  setInput('')
+                  if (textareaRef.current) textareaRef.current.style.height = 'auto'
+                  setSlashMenuSuppressed(true)
+                  void startNewSession()
+                }
+              }}
+              onOpenSettings={() => {
+                setSettingsOpen(true)
+                setInput('')
+                if (textareaRef.current) textareaRef.current.style.height = 'auto'
+                setSlashMenuSuppressed(true)
+              }}
+              onDismiss={() => {
+                setInput('')
+                if (textareaRef.current) textareaRef.current.style.height = 'auto'
+                setSlashMenuSuppressed(true)
+                textareaRef.current?.focus()
+              }}
+            />
+          )}
           <div
             style={{
               background: 'var(--bg-input)',
@@ -1177,7 +1615,9 @@ export default function HomePage() {
               value={input}
               onChange={handleTextareaInput}
               onKeyDown={handleKey}
-              placeholder="发送消息… (Enter 发送，Shift+Enter 换行)"
+              onBlur={() => { setSlashMenuSuppressed(true) }}
+              onFocus={() => { if (input.startsWith('/')) setSlashMenuSuppressed(false) }}
+              placeholder="发送消息… 输入 / 选择 workflow (Enter 发送，Shift+Enter 换行)"
               disabled={isLoading}
               rows={1}
               style={{
@@ -1197,8 +1637,8 @@ export default function HomePage() {
               <ModeToggle mode={mode} onChange={setMode} disabled={isLoading} />
               <button
                 onClick={() => handleSubmit()}
-                disabled={isLoading || !input.trim()}
-                onMouseDown={e => { if (!isLoading && input.trim()) (e.currentTarget.style.transform = 'scale(0.95)') }}
+                disabled={isLoading || !input.trim() || showSlashMenu}
+                onMouseDown={e => { if (!isLoading && input.trim() && !showSlashMenu) (e.currentTarget.style.transform = 'scale(0.95)') }}
                 onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
                 style={{
                   width: 30, height: 30,
@@ -1242,6 +1682,18 @@ export default function HomePage() {
         blinoUrl={BLINO_URL}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      <ProjectPanel
+        open={projectPanelOpen}
+        onClose={() => { setProjectPanelOpen(false) }}
+        tasks={workflowTasks}
+      />
+
+      <WorkflowToastStack
+        toasts={workflowToasts}
+        onHILDecide={handleWorkflowToastHil}
+        onDismiss={dismissWorkflowToast}
       />
     </div>
   )

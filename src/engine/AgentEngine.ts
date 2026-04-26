@@ -22,6 +22,8 @@ import type {
   APIClient,
 } from '../types.js'
 import { agentLoop, type AgentLoopResult } from './agentLoop.js'
+import { eventBus } from '../events/EventBus.js'
+import { startHilFileBridge } from '../events/hilFileBridge.js'
 import { checkToolPermission } from '../permissions/engine.js'
 import { recordDenial } from '../permissions/engine.js'
 import { dateContextProvider } from '../context/providers/dateContext.js'
@@ -72,6 +74,21 @@ function buildCanUseTool(
         permissionResult: result,
       })
 
+      if (response.decision === 'pending') {
+        state.hilPending = true
+        eventBus.emit('hil_suspend', { id: state.sessionId })
+        const l = state.settings?.logger as
+          { info?: (o: object, s?: string) => void; warn?: (o: object, s?: string) => void } | undefined
+        const line = `[hil] suspended ${state.sessionId} (adapter pending; awaiting hil_resume before next model turn)`
+        if (l?.info) l.info({ sessionId: state.sessionId }, line)
+        else if (l?.warn) l.warn({ sessionId: state.sessionId }, line)
+        else {
+          // eslint-disable-next-line no-console
+          console.log(line)
+        }
+        return { behavior: 'deny', reason: 'HIL: permission request deferred (pending) — will continue after resume' }
+      }
+
       switch (response.decision) {
         case 'allow':
           return { behavior: 'allow' }
@@ -117,6 +134,16 @@ export async function runAgentLoop(
 
   const canUseTool = buildCanUseTool(state, config, abortController)
 
+  const stopHilBridge = startHilFileBridge(state, line => {
+    const l = state.settings?.logger as
+      { info?: (o: object, s?: string) => void; warn?: (o: object, s?: string) => void } | undefined
+    if (l?.info) l.info({ sessionId: state.sessionId }, line)
+    else {
+      // eslint-disable-next-line no-console
+      console.log(line)
+    }
+  })
+
   const loop = agentLoop({
     state,
     apiClient: config.apiClient,
@@ -138,6 +165,7 @@ export async function runAgentLoop(
   let currentTurn = 0
   let textBuffer = ''
 
+  try {
   for (;;) {
     const iterResult = await loop.next()
     if (iterResult.done) {
@@ -220,6 +248,9 @@ export async function runAgentLoop(
     if (event.type === 'error') {
       config.adapter.onError(event.error)
     }
+  }
+  } finally {
+    stopHilBridge()
   }
 
   return result

@@ -50,6 +50,7 @@ export function createSessionState(options: {
     fallbackModel: options.settings?.fallbackModel,
     settings: options.settings || {},
     lastTurnInputTokens: 0,
+    hilPending: false,
   }
 }
 
@@ -91,4 +92,8 @@ export function clearSession(state: SessionState): void {
     fastModeHeaderLatched: null,
     thinkingClearLatched: null,
   }
+  state.hilPending = false
+  state.workflowSnapshot = undefined
+  state.workflowSubAgentSnapshots = undefined
+  state.orchestratorSystemPreamble = undefined
 }

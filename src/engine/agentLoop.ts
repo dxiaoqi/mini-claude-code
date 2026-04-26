@@ -39,6 +39,7 @@ import { tryReactiveCompact } from '../compact/reactiveCompact.js'
 import { StreamingToolExecutor } from './StreamingToolExecutor.js'
 import { runStopHooks } from '../utils/hooks.js'
 import type { HooksSettings } from '../utils/hooks.js'
+import { eventBus } from '../events/EventBus.js'
 
 export interface AgentLoopParams {
   /** 会话状态（直接引用，内部会修改其属性） */
@@ -93,6 +94,32 @@ export async function* agentLoop(
       return { reason: 'max_turns', turnCount }
     }
 
+    if (state.hilPending) {
+      const id = state.sessionId
+      const logHil = (line: string) => {
+        const l = state.settings?.logger as { info?: (o: object, s?: string) => void; warn?: (o: object, s?: string) => void } | undefined
+        if (l?.info) l.info({ sessionId: id }, line)
+        else if (l?.warn) l.warn({ sessionId: id }, line)
+        else {
+          // eslint-disable-next-line no-console
+          console.log(line)
+        }
+      }
+      logHil(`[hil] suspended ${id} (waiting for hil_resume — use: blino --emit hil_resume ${id})`)
+      if (state.orchestratorSystemPreamble) {
+        // eslint-disable-next-line no-console
+        console.error(`[orchestrator] 等待审批 — 恢复请执行: blino --emit hil_resume ${id}`)
+      }
+      try {
+        await eventBus.waitFor('hil_resume', id)
+        state.hilPending = false
+        logHil(`[hil] resumed ${id}`)
+      } catch (err) {
+        yield { type: 'error', error: err instanceof Error ? err : new Error(String(err)) }
+        return { reason: 'error', turnCount }
+      }
+    }
+
     // ── Phase 0a: 工具结果大小限制（超限持久化到磁盘）──
     state.messages = await applyToolResultBudget(state.messages, state.sessionId)
 
@@ -131,6 +158,17 @@ export async function* agentLoop(
     let stopReason = 'end_turn'
     let currentModel = state.model
     let currentText = ''
+    /** extended thinking 流，与 currentText 独立累积，flush 时合并为一条 text（避免 assistant 全空且不入库） */
+    let currentThinking = ''
+
+    const flushStreamToAssistantBlocks = (): void => {
+      if (currentText || currentThinking) {
+        const t = [currentThinking, currentText].filter(s => s.length > 0).join('\n\n')
+        if (t) assistantContentBlocks.push({ type: 'text', text: t })
+        currentText = ''
+        currentThinking = ''
+      }
+    }
 
     // 创建工具执行上下文（注入回调给各工具使用）
     const toolContext: ToolContext = {
@@ -176,11 +214,8 @@ export async function* agentLoop(
           // 记录为已发现工具（用于 deferred loading）
           discoveredToolNames.add(event.name)
 
-          // 累积的文本 → text block
-          if (currentText) {
-            assistantContentBlocks.push({ type: 'text', text: currentText })
-            currentText = ''
-          }
+          // 累积的文本 + thinking → text block
+          flushStreamToAssistantBlocks()
 
           // 构建 tool_use block
           const block: ToolUseBlock = {
@@ -202,14 +237,14 @@ export async function* agentLoop(
           case 'text_delta':
             currentText += event.text
             break
+          case 'thinking_delta':
+            currentThinking += event.thinking
+            break
           case 'message_start':
             currentModel = event.model
             break
           case 'message_end':
-            if (currentText) {
-              assistantContentBlocks.push({ type: 'text', text: currentText })
-              currentText = ''
-            }
+            flushStreamToAssistantBlocks()
             currentUsage = event.usage
             stopReason = event.stopReason
             accumulateUsage(state, event.usage, currentModel)
@@ -260,10 +295,8 @@ export async function* agentLoop(
       return { reason: 'error', turnCount }
     }
 
-    // 剩余文本
-    if (currentText) {
-      assistantContentBlocks.push({ type: 'text', text: currentText })
-    }
+    // 流结束后剩余文本 + thinking
+    flushStreamToAssistantBlocks()
 
     // 最终化 assistant 消息（如果只有空内容则标记为空字符串）
     ;(assistantMessage as { content: ContentBlock[] | string }).content =

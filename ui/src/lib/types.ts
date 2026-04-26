@@ -179,6 +179,160 @@ export interface SessionPreferences {
   hilTolerance: 'low' | 'normal' | 'high'
 }
 
+// ─── Workflow (P4) ───────────────────────────────────────────────────────────
+
+export interface WorkflowInput {
+  id: string
+  label: string
+  type: 'text' | 'textarea' | 'select' | 'date'
+  placeholder?: string
+  options?: string[]
+  default?: string
+  required: boolean
+}
+
+export interface WorkflowSummary {
+  id: string
+  name: string
+  description: string
+  nodeCount: number
+  nodeIds: string[]
+  inputs?: WorkflowInput[]
+  /** 节点与依赖，用于 DAG 卡布局 */
+  nodes: Array<{ id: string; dependsOn: string[] }>
+}
+
+export type WorkflowNodeStateStatus = 'pending' | 'running' | 'done' | 'failed' | 'waiting'
+
+export interface NodeState {
+  status: WorkflowNodeStateStatus
+  result?: string
+  error?: string
+}
+
+/** @deprecated 使用 NodeState */
+export type WorkflowDagNodeState = NodeState
+
+export interface HILState {
+  nodeId: string
+  question: string
+  options: Array<{ id: string; label: string }>
+  decided: boolean
+  decision?: 'approve' | 'reject'
+  decidedAt?: string
+}
+
+/** @deprecated 使用 HILState */
+export type WorkflowDagHilState = HILState
+
+export interface DagCardState {
+  workflowId: string
+  workflowName: string
+  runId: string
+  nodeIds: string[]
+  nodeStates: Record<string, NodeState>
+  hilState?: HILState
+  overallStatus: 'running' | 'done' | 'failed'
+  inputValues: Record<string, string>
+  globalError?: string
+}
+
+/** 后台工作流任务（由 workflow-manager 维护，多任务并发） */
+export interface WorkflowTask {
+  runId: string
+  workflowId: string
+  workflowName: string
+  /** 与 chat 中占位/结论消息对应 */
+  messageId: string
+  status: 'running' | 'done' | 'failed'
+  startedAt: number
+  /** 复刻 WorkflowDAGCard 所需元数据 */
+  workflow: WorkflowSummary
+  nodeIds: string[]
+  dagState: DagCardState | null
+  /** 拓扑最后一个有文本结果的节点 */
+  finalResult?: string
+  finalNodeId?: string
+  lastError?: string
+}
+
+export type ToastType = 'hil' | 'done' | 'error'
+
+export interface WorkflowToast {
+  id: string
+  type: ToastType
+  runId: string
+  workflowName: string
+  nodeId?: string
+  question?: string
+  options?: Array<{ id: string; label: string }>
+  decided?: boolean
+  decision?: 'approve' | 'reject'
+  finalResult?: string
+  errorMessage?: string
+  autoCloseMs?: number
+}
+
+export type SlashCommandCategory = 'workflow' | 'skill' | 'session' | 'settings'
+
+export interface SlashCommandItem {
+  id: string
+  category: SlashCommandCategory
+  name: string
+  description: string
+  badge?: string
+  hasChildren?: boolean
+  data?: unknown
+}
+
+export type WorkflowEventType =
+  | 'node_start'
+  | 'node_done'
+  | 'workflow_complete'
+  | 'workflow_error'
+  | 'hil_suspend'
+
+export interface WorkflowEvent {
+  type: WorkflowEventType
+  runId: string
+  nodeId?: string
+  nodeIndex?: number
+  totalNodes?: number
+  result?: string
+  error?: string
+  question?: string
+  options?: Array<{ id: string; label: string }>
+  status?: 'done' | 'failed'
+  id?: string
+}
+
+export type WorkflowBubbleType =
+  | 'workflow_started'
+  | 'workflow_progress'
+  | 'workflow_hil'
+  | 'workflow_complete'
+  | 'workflow_error'
+
+export interface WorkflowBubble {
+  id: string
+  bubbleType: WorkflowBubbleType
+  runId?: string
+  workflowId?: string
+  workflowName?: string
+  nodeIds?: string[]
+  nodeId?: string
+  nodeIndex?: number
+  totalNodes?: number
+  result?: string
+  error?: string
+  question?: string
+  options?: Array<{ id: string; label: string }>
+  hilDecision?: 'approve' | 'reject'
+  hilDecidedAt?: number
+  status?: 'running' | 'done' | 'failed'
+  createdAt: number
+}
+
 export interface Session {
   id: string
   userId?: string

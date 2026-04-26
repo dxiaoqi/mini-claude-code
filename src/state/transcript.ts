@@ -1,21 +1,21 @@
 /**
  * state/transcript.ts — Transcript 持久化
  *
- * 将会话消息以 JSONL 追加写入 ~/.blino/projects 下的会话文件。
+ * 将会话消息以 JSONL 追加写入用户主目录下 Blino projects 子目录（见 constants/blinoPaths）。
  */
 import { writeFile, mkdir, readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import type { Message, SessionState } from '../types.js'
 import { handleSilentError } from '../errors/handlers.js'
+import { BLINO_USER_SUB, resolveUserBlinoPath } from '../constants/blinoPaths.js'
 
 /**
  * Get the transcript directory for a project.
- * ~/.blino/projects/<hash>/
+ * <用户主目录>/<BLINO_DIR_NAME>/projects/<hash>/
  */
 function getTranscriptDir(projectRoot: string): string {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
   const hash = simpleHash(projectRoot)
-  return resolve(homeDir, '.blino', 'projects', hash)
+  return resolveUserBlinoPath(BLINO_USER_SUB.projects, hash)
 }
 
 function getTranscriptPath(projectRoot: string, sessionId: string): string {

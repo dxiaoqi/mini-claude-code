@@ -9,6 +9,7 @@ import { z } from 'zod'
 import type { PermissionResult, Tool, ToolResult } from '../../types.js'
 import type { MCPConnection } from '../../mcp/client.js'
 import type { Resource } from '@modelcontextprotocol/sdk/types.js'
+import { BLINO_TILDE_ROOT } from '../../constants/blinoPaths.js'
 
 const inputSchema = z.object({
   server: z.string().optional().describe('MCP server name to list resources from (default: all connected servers)'),
@@ -49,7 +50,7 @@ export const ListMcpResourcesTool: Tool<Input, Output> = {
     if (!mcpManager) {
       return {
         data: { resources: [], count: 0 },
-        metadata: { error: 'No MCP servers connected. Configure mcpServers in .blino/settings.json.' },
+        metadata: { error: `No MCP servers connected. Configure mcpServers in ${BLINO_TILDE_ROOT}/settings.json.` },
       }
     }
 

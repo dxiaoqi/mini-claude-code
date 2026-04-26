@@ -6,6 +6,7 @@
 import { readFile, writeFile, mkdir, stat, readdir, rm } from 'node:fs/promises'
 import { resolve, dirname, basename } from 'node:path'
 import type { SessionState } from '../types.js'
+import { BLINO_USER_SUB, resolveUserBlinoPath } from '../constants/blinoPaths.js'
 
 interface FileSnapshot {
   filePath: string
@@ -20,8 +21,7 @@ const snapshots: Map<string, FileSnapshot[]> = new Map()
  * Get the snapshot directory for the session.
  */
 function getSnapshotDir(state: SessionState): string {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp'
-  return resolve(homeDir, '.blino', 'snapshots', state.sessionId)
+  return resolveUserBlinoPath(BLINO_USER_SUB.snapshots, state.sessionId)
 }
 
 /**
