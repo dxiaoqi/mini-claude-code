@@ -109,7 +109,16 @@ function getToolUseSection(enabledToolNames: string[]): string {
       ? `Use Agent for parallelizable subtasks or to protect the main context from excessive results. Don't duplicate work that agents are already doing.`
       : null,
     enabledToolNames.includes('Skill')
-      ? `Use the Skill tool to execute project-defined workflows from ${BLINO_DIR_NAME}/skills/.`
+      ? `Use the Skill tool to execute workflows from ${BLINO_DIR_NAME}/skills/ (project) and ~/.${BLINO_DIR_NAME}/skills/ (user).`
+      : null,
+    enabledToolNames.includes('SkillCreator')
+      ? `当用户希望创建新的 skill 时，使用 SkillCreator 工具：
+1. 先调用 SkillCreator(action=list_templates) 了解 skill 设计规范
+2. 根据用户描述设计 skill 的 name、description、allowedTools、prompt
+3. 调用 SkillCreator(action=create, ...) 写入文件
+4. 告知用户 skill 已创建，可以通过 Skill(skill=<name>) 调用
+
+不要用 FileWrite 直接写 skill 文件，统一走 SkillCreator。`
       : null,
     enabledToolNames.includes('ToolSearch')
       ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`

@@ -28,6 +28,7 @@ import { PDFReadTool } from '../tools/content/PDFReadTool.js'
 import { TodoWriteTool } from '../tools/interaction/TodoWriteTool.js'
 import { AskUserTool } from '../tools/interaction/AskUserTool.js'
 import { SkillTool } from '../tools/interaction/SkillTool.js'
+import { SkillCreatorTool } from '../tools/interaction/SkillCreatorTool.js'
 import { SendMessageTool } from '../tools/agent/SendMessageTool.js'
 import { TaskStopTool } from '../tools/agent/TaskStopTool.js'
 import { TaskOutputTool } from '../tools/agent/TaskOutputTool.js'
@@ -178,7 +179,7 @@ export async function runWorkflowRun(
   const coreTools: Tool[] = [
     BashTool, FileReadTool, FileEditTool, FileWriteTool,
     GlobTool, GrepTool,
-    TodoWriteTool, AskUserTool, SkillTool,
+    TodoWriteTool, AskUserTool, SkillTool, SkillCreatorTool,
     SendMessageTool, TaskStopTool, TaskOutputTool,
   ]
   const deferredTools: Tool[] = [
