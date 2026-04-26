@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { ArrowUp, Loader2, Download, Image as ImageIcon, Sun, Moon, Settings } from 'lucide-react'
 import { MessageItem, type ChatMessage, type InProgressArtifact, type ToolCallItem } from '@/components/MessageItem'
 import { type WidgetState } from '@/components/WidgetRenderer'
@@ -161,8 +162,31 @@ export default function HomePage() {
   // Pending session creation Promise — avoids blocking the first message
   const artifactsSessionPromiseRef = useRef<Promise<void> | null>(null)
 
+  /** Server session id for current mode — drives SessionMenu highlight */
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  /** false 直到首屏从 URL 恢复 session/mode 完成，避免把 ?session= 冲掉 */
+  const [urlSyncReady, setUrlSyncReady] = useState(false)
+  const pathname = usePathname()
+  const router = useRouter()
+
+  const replaceChatUrl = useCallback(
+    (m: AppMode, sessionId: string | null) => {
+      if (typeof window === 'undefined') return
+      const params = new URLSearchParams(window.location.search)
+      if (sessionId) params.set('session', sessionId)
+      else params.delete('session')
+      params.set('mode', m)
+      const qs = params.toString()
+      const next = `${pathname}?${qs}`
+      const cur = `${window.location.pathname}${window.location.search}`
+      if (cur !== next) router.replace(next, { scroll: false })
+    },
+    [pathname, router],
+  )
+
   // Eagerly create Artifacts session in background when mode switches to 'artifacts'
   useEffect(() => {
+    if (!urlSyncReady) return
     if (mode !== 'artifacts' || artifactsSessionIdRef.current || artifactsSessionPromiseRef.current) return
     artifactsSessionPromiseRef.current = (async () => {
       let systemPromptAddendum: string | undefined
@@ -187,7 +211,7 @@ export default function HomePage() {
         }
       } catch { /* skip */ }
     })()
-  }, [mode])
+  }, [mode, urlSyncReady])
 
   // Artifacts mode real-time streaming state machine
   const artifactsStreamRef = useRef({
@@ -218,8 +242,7 @@ export default function HomePage() {
   // Export states
   const [jsonExportState, setJsonExportState] = useState<ExportBtnState>('idle')
   const [imgExportState, setImgExportState] = useState<ExportBtnState>('idle')
-  /** Server session id for current mode — drives SessionMenu highlight */
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [availableWorkflows, setAvailableWorkflows] = useState<WorkflowSummary[]>([])
   /** 失焦时隐藏 / 菜单，避免仅靠 input 无法收起 */
@@ -768,8 +791,9 @@ export default function HomePage() {
     } catch { /* ignore */ }
   }, [isLoading, resetInProgress, mode, fetchVisualContextBody])
 
-  const switchToSession = useCallback(async (sessionId: string) => {
+  const switchToSession = useCallback(async (sessionId: string, modeForSession?: AppMode) => {
     if (isLoading) return
+    const effMode = modeForSession ?? modeRef.current
     abortRef.current?.abort()
     resetInProgress()
     workflowManager.reset()
@@ -783,7 +807,7 @@ export default function HomePage() {
     currentAssistantMsgIdRef.current = null
 
     const body: Record<string, unknown> = { resumeSessionId: sessionId }
-    if (mode === 'artifacts') {
+    if (effMode === 'artifacts') {
       const addendum = await fetchVisualContextBody()
       if (addendum) body.systemPromptAddendum = addendum
     }
@@ -798,7 +822,7 @@ export default function HomePage() {
       const sessData = await sessRes.json()
       const id = sessData.session?.id ?? sessionId
 
-      if (mode === 'agent') agentSessionIdRef.current = id
+      if (effMode === 'agent') agentSessionIdRef.current = id
       else artifactsSessionIdRef.current = id
 
       setActiveSessionId(id)
@@ -812,7 +836,44 @@ export default function HomePage() {
       const chat = apiMessagesToChatMessages(stateData.messages ?? [], id)
       setMessages(chat)
     } catch { /* ignore */ }
-  }, [isLoading, resetInProgress, mode, fetchVisualContextBody])
+  }, [isLoading, resetInProgress, fetchVisualContextBody])
+
+  const switchToSessionRef = useRef(switchToSession)
+  switchToSessionRef.current = switchToSession
+
+  /** 刷新后从 ?session=&mode= 恢复；完成后才允许把当前会话写回 URL */
+  useLayoutEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sidRaw = params.get('session')?.trim() ?? ''
+    const urlMode = params.get('mode')
+    const sidOk = sidRaw.length > 0 && /^[0-9a-fA-F-]{8,}$/.test(sidRaw)
+    const hasMode = urlMode === 'agent' || urlMode === 'artifacts'
+
+    if (!sidOk && !hasMode) {
+      setUrlSyncReady(true)
+      return
+    }
+
+    const boot = async () => {
+      try {
+        if (hasMode) {
+          setMode(urlMode as AppMode)
+          modeRef.current = urlMode as AppMode
+        }
+        if (sidOk) {
+          await switchToSessionRef.current(sidRaw, hasMode ? (urlMode as AppMode) : undefined)
+        }
+      } finally {
+        setUrlSyncReady(true)
+      }
+    }
+    void boot()
+  }, [])
+
+  useEffect(() => {
+    if (!urlSyncReady) return
+    replaceChatUrl(mode, activeSessionId)
+  }, [urlSyncReady, mode, activeSessionId, replaceChatUrl])
 
   // ─── Stream event processor (unified UIEvent format) ─────────────────────
 

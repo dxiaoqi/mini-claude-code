@@ -142,17 +142,17 @@ export async function* agentLoop(
     const toolSchemas = getAPIToolSchemas(activeTools)
 
     // ── Phase 3: 流式 API 调用 ──
-    const apiStream = params.apiClient.callModel({
-      model: state.model,
-      systemPrompt,
-      messages: state.messages,
-      tools: toolSchemas,
-      maxOutputTokens: maxOutputTokensOverride,
-      signal: params.signal,
-      promptCacheLatches: state.promptCacheLatches,
-    })
+    // 每轮使用独立 signal 传给 callModel / fetch，避免在同一 session AbortSignal 上累积监听（Node 默认超过 10 个会告警）
+    const turnAbort = new AbortController()
+    const forwardSessionAbort = () => turnAbort.abort()
+    if (params.signal) {
+      if (params.signal.aborted) {
+        return { reason: 'aborted', turnCount }
+      }
+      params.signal.addEventListener('abort', forwardSessionAbort)
+    }
 
-    // 用于收集本轮 assistant 消息内容
+    // 用于收集本轮 assistant 消息内容（在 try 外声明，以便 finally 之后仍可使用）
     const assistantContentBlocks: ContentBlock[] = []
     let currentUsage: Usage = { inputTokens: 0, outputTokens: 0 }
     let stopReason = 'end_turn'
@@ -193,6 +193,17 @@ export async function* agentLoop(
     )
 
     try {
+      const apiStream = params.apiClient.callModel({
+        model: state.model,
+        systemPrompt,
+        messages: state.messages,
+        tools: toolSchemas,
+        maxOutputTokens: maxOutputTokensOverride,
+        signal: turnAbort.signal,
+        promptCacheLatches: state.promptCacheLatches,
+      })
+
+      try {
       for await (const event of apiStream) {
         if (event.type === 'tool_use_start') {
           // ── backfillObservableInput: 在克隆副本上丰富 input 给 observers ──
@@ -257,7 +268,7 @@ export async function* agentLoop(
             return { reason: 'error', turnCount }
         }
       }
-    } catch (err) {
+      } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       const statusCode = extractStatusCode(error)
 
@@ -293,6 +304,11 @@ export async function* agentLoop(
 
       yield { type: 'error', error }
       return { reason: 'error', turnCount }
+      }
+    } finally {
+      if (params.signal) {
+        params.signal.removeEventListener('abort', forwardSessionAbort)
+      }
     }
 
     // 流结束后剩余文本 + thinking
