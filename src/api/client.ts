@@ -179,7 +179,10 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
             if (tc.id) {
-              if (currentToolCallId && currentToolCallName) {
+              // 仅在「新 id」出现时结束上一段工具；部分厂商（如 DashScope/Qwen）会在每个
+              // chunk 重复带上同一 id，若此处无条件 flush 会多 yield 一次 tool_use_start，
+              // 前端会出现两张相同工具卡后再合并的错觉。
+              if (currentToolCallId && currentToolCallName && tc.id !== currentToolCallId) {
                 let input: Record<string, unknown> = {}
                 try {
                   input = JSON.parse(currentToolCallArgs || '{}')
@@ -191,9 +194,14 @@ export function createOpenAICompatibleClient(config: OpenAICompatibleConfig): AP
                   input,
                 }
               }
-              currentToolCallId = tc.id
-              currentToolCallName = tc.function?.name || ''
-              currentToolCallArgs = tc.function?.arguments || ''
+              if (!currentToolCallId || tc.id !== currentToolCallId) {
+                currentToolCallId = tc.id
+                currentToolCallName = tc.function?.name || ''
+                currentToolCallArgs = tc.function?.arguments || ''
+              } else {
+                if (tc.function?.name) currentToolCallName = tc.function.name
+                if (tc.function?.arguments) currentToolCallArgs += tc.function.arguments
+              }
             } else {
               if (tc.function?.arguments) {
                 currentToolCallArgs += tc.function.arguments

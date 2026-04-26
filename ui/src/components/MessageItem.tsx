@@ -34,6 +34,8 @@ export interface ChatMessage {
   workflowComplete?: boolean
   /** 与后台 WorkflowTask 对齐 */
   workflowRunId?: string
+  /** 从 session 恢复时与相邻 assistant 不合并为一条 */
+  workflowNoMerge?: boolean
 }
 
 export interface InProgressArtifact {
@@ -108,14 +110,14 @@ function ThinkBubble({ text }: { text: string }) {
 
 // ─── Tool calls collapsible group ─────────────────────────────────────────────
 
-function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[]; isStreaming?: boolean }) {
+/** 2+ 个工具：汇总条 + 可展开列表（hooks 仅在此组件内，避免条件调用） */
+function ToolCallsGroupMulti({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[]; isStreaming?: boolean }) {
   const hasRunning = toolCalls.some(t => t.status === 'running')
   const runningTool = toolCalls.find(t => t.status === 'running')
   const doneCount = toolCalls.filter(t => t.status === 'done' || t.status === 'error').length
   const total = toolCalls.length
 
-  // Start expanded only when there's exactly 1 running tool (easy to see what's happening)
-  const [expanded, setExpanded] = useState(total === 1)
+  const [expanded, setExpanded] = useState(false)
 
   // Ticker: cycle through tool names while tools are running
   const [tickerIdx, setTickerIdx] = useState(0)
@@ -125,10 +127,10 @@ function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[];
     return () => clearInterval(id)
   }, [isStreaming, hasRunning, toolCalls.length])
 
-  // Auto-collapse when a second tool arrives, or when all tools finish
+  // 全部完成后收起明细（本组件仅用于 2+ 工具，不再处理「第二个工具刚到」的 1→2 切换）
   useEffect(() => {
-    if (total > 1 || !hasRunning) setExpanded(false)
-  }, [total, hasRunning])
+    if (!hasRunning) setExpanded(false)
+  }, [hasRunning])
 
   // Keep collapsed once streaming ends
   useEffect(() => {
@@ -218,6 +220,17 @@ function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[];
       )}
     </div>
   )
+}
+
+function ToolCallsGroup({ toolCalls, isStreaming }: { toolCalls: ToolCallItem[]; isStreaming?: boolean }) {
+  if (toolCalls.length === 1) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <ToolCallCard toolCall={toolCalls[0]!} />
+      </div>
+    )
+  }
+  return <ToolCallsGroupMulti toolCalls={toolCalls} isStreaming={isStreaming} />
 }
 
 // ─── MessageItem ──────────────────────────────────────────────────────────────

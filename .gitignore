@@ -68,3 +68,5 @@ logs/
 ui-standalone/
 # npm publish dry-run output
 *.tgz
+
+.blino/

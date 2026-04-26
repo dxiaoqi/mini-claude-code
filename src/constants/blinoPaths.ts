@@ -30,6 +30,8 @@ export const BLINO_PROJECT_SUB = {
   artifacts: 'artifacts',
   /** 工作流定义文件（.json / .yaml） */
   workflows: 'workflows',
+  /** 用户自定义工具（.json HTTP / .tool.js 脚本） */
+  tools: 'tools',
 } as const
 
 export const BLINO_CONFIG_FILE = {

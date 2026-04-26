@@ -24,6 +24,7 @@ import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
+import { appendSessionUiMessage, withBlinoWfPrefix } from '@/lib/session-ui-sync'
 
 /** 未提交前：仅表单元数据（运行态在 workflowManager） */
 type WorkflowFormDraft = {
@@ -39,6 +40,9 @@ interface StreamMeta { conversationId?: string; artifactId?: string; turnId?: st
 
 let msgCounter = 0
 function nextId() { return `msg_${++msgCounter}` }
+
+/** 防止 React Strict 或重跑 effect 时重复 POST ui-message；module 级在 remount 后仍去重 */
+const workflowUiMessageSyncedRunIds = new Set<string>()
 
 let splitBlockCounter = 0
 /**
@@ -231,6 +235,7 @@ export default function HomePage() {
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTask[]>([])
   const [workflowToasts, setWorkflowToasts] = useState<WorkflowToast[]>([])
   const [projectPanelOpen, setProjectPanelOpen] = useState(false)
+  const workflowChatFinalizedRef = useRef<Set<string>>(new Set())
   const workflowDoneToastRef = useRef<Set<string>>(new Set())
   const workflowErrToastRef = useRef<Set<string>>(new Set())
   const workflowHilToastSeenRef = useRef<Set<string>>(new Set())
@@ -381,8 +386,8 @@ export default function HomePage() {
 
   useEffect(() => {
     for (const t of workflowTasks) {
-      if (t.status === 'done' && !workflowDoneToastRef.current.has(t.runId)) {
-        workflowDoneToastRef.current.add(t.runId)
+      if (t.status === 'done' && !workflowChatFinalizedRef.current.has(t.runId)) {
+        workflowChatFinalizedRef.current.add(t.runId)
         const body = t.finalResult?.trim() ? t.finalResult : '_（无文本输出）_'
         updateMessage(t.messageId, {
           workflowPlaceholder: false,
@@ -390,38 +395,81 @@ export default function HomePage() {
           content: `✓ **${t.workflowName}** 完成\n\n${body}`,
           workflowRunId: t.runId,
         })
-        setWorkflowToasts(prev => [
-          ...prev,
-          {
-            id: `done-${t.runId}`,
-            type: 'done',
-            runId: t.runId,
-            workflowName: t.workflowName,
-            autoCloseMs: 3000,
-          },
-        ])
-      } else if (t.status === 'failed' && !workflowErrToastRef.current.has(t.runId)) {
-        workflowErrToastRef.current.add(t.runId)
+      } else if (t.status === 'failed' && !workflowChatFinalizedRef.current.has(t.runId)) {
+        workflowChatFinalizedRef.current.add(t.runId)
         const errText = t.lastError || t.dagState?.globalError || '工作流失败'
         updateMessage(t.messageId, {
           workflowPlaceholder: false,
           content: `**${t.workflowName}** 已失败\n\n${errText}`,
           workflowRunId: t.runId,
         })
+      }
+      if (t.status === 'done' && t.sessionId && !workflowUiMessageSyncedRunIds.has(t.runId)) {
+        workflowUiMessageSyncedRunIds.add(t.runId)
+        const body = t.finalResult?.trim() ? t.finalResult : '_（无文本输出）_'
+        const visible = `✓ **${t.workflowName}** 完成\n\n${body}`
+        void appendSessionUiMessage(BLINO_URL, t.sessionId, {
+          role: 'assistant',
+          content: withBlinoWfPrefix(visible, {
+            v: 1, k: 'd', wn: t.workflowName, r: t.runId, i: t.workflowId, nm: true,
+          }),
+        })
+      } else if (t.status === 'failed' && t.sessionId && !workflowUiMessageSyncedRunIds.has(t.runId)) {
+        workflowUiMessageSyncedRunIds.add(t.runId)
+        const errText = t.lastError || t.dagState?.globalError || '工作流失败'
+        const visible = `**${t.workflowName}** 已失败\n\n${errText}`
+        void appendSessionUiMessage(BLINO_URL, t.sessionId, {
+          role: 'assistant',
+          content: withBlinoWfPrefix(visible, {
+            v: 1, k: 'f', wn: t.workflowName, r: t.runId, i: t.workflowId, nm: true,
+          }),
+        })
+      }
+    }
+  }, [workflowTasks, updateMessage])
+
+  useEffect(() => {
+    const onTerminal = (e: Event) => {
+      const d = (e as CustomEvent<{
+        runId: string
+        status?: string
+        workflowName?: string
+        lastError?: string
+      }>).detail
+      if (!d?.runId) return
+      if (d.status === 'done' && !workflowDoneToastRef.current.has(d.runId)) {
+        workflowDoneToastRef.current.add(d.runId)
         setWorkflowToasts(prev => [
           ...prev,
           {
-            id: `err-${t.runId}`,
+            id: `done-${d.runId}`,
+            type: 'done',
+            runId: d.runId,
+            workflowName: d.workflowName ?? '工作流',
+            autoCloseMs: 3000,
+          },
+        ])
+        return
+      }
+      if (d.status === 'failed' && !workflowErrToastRef.current.has(d.runId)) {
+        workflowErrToastRef.current.add(d.runId)
+        setWorkflowToasts(prev => [
+          ...prev,
+          {
+            id: `err-${d.runId}`,
             type: 'error',
-            runId: t.runId,
-            workflowName: t.workflowName,
-            errorMessage: errText,
+            runId: d.runId,
+            workflowName: d.workflowName ?? '工作流',
+            errorMessage: d.lastError ?? '工作流失败',
             autoCloseMs: 5000,
           },
         ])
       }
     }
-  }, [workflowTasks, updateMessage])
+    if (typeof window === 'undefined') return
+    window.addEventListener('blino:workflow:terminal', onTerminal)
+    return () => window.removeEventListener('blino:workflow:terminal', onTerminal)
+  }, [])
 
   const appendSystemBubble = useCallback(
     (text: string) => {
@@ -606,12 +654,25 @@ export default function HomePage() {
         if (input.default) defaults[input.id] = input.default
       }
 
+      const sessionId = await resolveBlinoSessionId()
       const msgId = addMessage({
         role: 'assistant',
         content: `工作流：**${merged.name}**`,
         workflowHost: true,
         isStreaming: false,
       })
+      if (sessionId) {
+        void appendSessionUiMessage(BLINO_URL, sessionId, {
+          role: 'assistant',
+          content: withBlinoWfPrefix(`工作流：**${merged.name}**`, {
+            v: 1,
+            k: 'h',
+            wn: merged.name,
+            i: merged.id,
+            nm: true,
+          }),
+        })
+      }
       setWorkflowFormDrafts(prev => ({
         ...prev,
         [msgId]: {
@@ -626,7 +687,7 @@ export default function HomePage() {
         void handleFormSubmit(msgId, merged, {})
       }
     },
-    [appendSystemBubble, handleFormSubmit, addMessage],
+    [appendSystemBubble, handleFormSubmit, addMessage, resolveBlinoSessionId],
   )
 
   const handleWorkflowToastHil = useCallback(
@@ -661,6 +722,7 @@ export default function HomePage() {
     abortRef.current?.abort()
     resetInProgress()
     workflowManager.reset()
+    workflowChatFinalizedRef.current = new Set()
     workflowDoneToastRef.current = new Set()
     workflowErrToastRef.current = new Set()
     workflowHilToastSeenRef.current = new Set()
@@ -711,6 +773,7 @@ export default function HomePage() {
     abortRef.current?.abort()
     resetInProgress()
     workflowManager.reset()
+    workflowChatFinalizedRef.current = new Set()
     workflowDoneToastRef.current = new Set()
     workflowErrToastRef.current = new Set()
     workflowHilToastSeenRef.current = new Set()

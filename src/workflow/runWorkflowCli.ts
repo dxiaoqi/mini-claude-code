@@ -42,6 +42,9 @@ import { MCPClientManager } from '../mcp/client.js'
 import { adaptMCPTools } from '../mcp/toolAdapter.js'
 import { loadMCPConfigs } from '../mcp/config.js'
 import type { WorkflowDef } from './types.js'
+import { UserToolLoader } from '../tools/user/UserToolLoader.js'
+import { mergeTools } from '../tools/user/mergeTools.js'
+import { BLINO_PROJECT_SUB, resolveProjectBlinoPath } from '../constants/blinoPaths.js'
 
 function log(s: string) {
   // eslint-disable-next-line no-console
@@ -184,8 +187,14 @@ export async function runWorkflowRun(
     ListMcpResourcesTool, ReadMcpResourceTool,
   ]
   const allBaseTools = [...coreTools, ...deferredTools, ...mcpTools]
-  const toolSearchTool = createToolSearchTool(allBaseTools)
-  const tools: Tool[] = [...allBaseTools, toolSearchTool]
+  const userToolsDir = resolveProjectBlinoPath(cwd, BLINO_PROJECT_SUB.tools)
+  const userToolLoader = new UserToolLoader(userToolsDir)
+  await userToolLoader.start()
+  const userTools = userToolLoader.getTools()
+  userToolLoader.stop()
+  const baseMerged = mergeTools(allBaseTools, userTools)
+  const toolSearchTool = createToolSearchTool(baseMerged)
+  const tools: Tool[] = [...baseMerged, toolSearchTool]
 
   const contextProviders: ContextProvider[] = [
     claudeMdProvider, memoryProvider, gitContextProvider, sessionMemoryProvider,

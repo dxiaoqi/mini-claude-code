@@ -454,7 +454,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       resolvePath(__dir, '..', 'ui', 'out'),
     ].find(p => { try { statSync(p); return true } catch { return false } })
 
-    const server = createBlinoServer({
+    const server = await createBlinoServer({
       port, host, corsOrigin,
       apiClient,
       tools: allToolsForServer,

@@ -11,6 +11,7 @@
  *   GET  /api/sessions/:id                   — 获取 session 状态
  *   DELETE /api/sessions/:id                 — 关闭/清空 session
  *   POST /api/sessions/:id/chat              — 发消息（SSE 流式返回）
+ *   POST /api/sessions/:id/ui-message         — 从 UI 追加单条 user/assistant（写入 state + transcript）
  *   POST /api/sessions/:id/compact           — 手动压缩
  *   POST /api/permission/:requestId/respond  — 权限弹窗回调
  *   GET  /workflow/list                       — 工作流列表
@@ -20,6 +21,7 @@
  *   POST /workflow/resume/:runId              — HIL 审批
  *   GET  /workflow/snapshot/:runId            — 运行快照 JSON
  *   GET  /workflow/list-running               — 当前运行中的 runId 列表
+ *   GET  /user-tools/list                     — 当前加载的用户自定义工具
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -27,11 +29,14 @@ import { readFile, stat } from 'node:fs/promises'
 import { resolve, extname, join } from 'node:path'
 import { v4 as uuidv4 } from 'uuid'
 import { HttpServerAdapter } from '../adapters/http.js'
-import { createSessionState } from '../state/SessionState.js'
+import { addMessage, createSessionState } from '../state/SessionState.js'
 import { BLINO_PROJECT_SUB, resolveProjectBlinoPath } from '../constants/blinoPaths.js'
+import { UserToolLoader } from '../tools/user/UserToolLoader.js'
+import { mergeTools } from '../tools/user/mergeTools.js'
+import { createToolSearchTool } from '../tools/ToolSearchTool.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
-import { listSessions, loadTranscript } from '../state/transcript.js'
+import { listSessions, loadTranscript, recordTranscript } from '../state/transcript.js'
 import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
@@ -88,12 +93,34 @@ export interface ServerConfig {
   webDistPath?: string
 }
 
-export function createBlinoServer(config: ServerConfig) {
+export async function createBlinoServer(config: ServerConfig) {
   const sessions = new Map<string, SessionEntry>()
   /** 并发工作流：runId -> workflowId，完成或异常时在 finally 中 delete */
   const runningWorkflows = new Map<string, string>()
   /** Replaced after PUT /api/config so new API keys apply without restart */
   let liveApiClient: APIClient = config.apiClient
+
+  function buildSessionTools(userToolsList: Tool[]): Tool[] {
+    const source = config.tools.filter(t => t.name !== 'ToolSearch' && t.name !== 'Agent')
+    const baseMerged = mergeTools(source, userToolsList)
+    const toolSearch = createToolSearchTool(baseMerged)
+    const agent = config.tools.find(t => t.name === 'Agent')
+    if (!agent) return [...baseMerged, toolSearch]
+    return [...baseMerged, toolSearch, agent]
+  }
+
+  const userToolsDir = resolveProjectBlinoPath(config.cwd, BLINO_PROJECT_SUB.tools)
+  const userToolLoader = new UserToolLoader(userToolsDir)
+  userToolLoader.onChange(() => {
+    const userTools = userToolLoader.getTools()
+    for (const entry of sessions.values()) {
+      entry.tools = buildSessionTools(userTools)
+    }
+    console.log(
+      `[UserToolLoader] 工具已热更新，当前用户工具：${userTools.map(t => t.name).join(', ') || '无'}`,
+    )
+  })
+  await userToolLoader.start()
 
   // ── 工具函数 ──
 
@@ -170,7 +197,7 @@ export function createBlinoServer(config: ServerConfig) {
       id,
       state,
       adapter,
-      tools: config.tools,
+      tools: buildSessionTools(userToolLoader.getTools()),
       apiClient: liveApiClient,
       contextProviders: config.contextProviders,
       mcpManager: config.mcpManager,
@@ -386,6 +413,16 @@ export function createBlinoServer(config: ServerConfig) {
       return
     }
 
+    // ── GET /user-tools/list ──
+    if (method === 'GET' && path === '/user-tools/list') {
+      const tools = userToolLoader.getTools().map(t => ({
+        name: t.name,
+        description: typeof t.description === 'string' ? t.description : t.name,
+      }))
+      json(res, { tools })
+      return
+    }
+
     // ── POST /api/sessions ──
     if (method === 'POST' && path === '/api/sessions') {
       const body = await readBody(req) as {
@@ -475,6 +512,33 @@ export function createBlinoServer(config: ServerConfig) {
       } else {
         json(res, { ok: false, error: 'Compact failed' }, 500)
       }
+      return
+    }
+
+    // ── POST /api/sessions/:id/ui-message  (UI 追加，参与 GET / 历史恢复) ──
+    const uiMessageMatch = path.match(/^\/api\/sessions\/([^/]+)\/ui-message$/)
+    if (method === 'POST' && uiMessageMatch) {
+      const sessionId = uiMessageMatch[1]
+      const body = (await readBody(req)) as { message?: { role?: string; content?: unknown } }
+      const msg = body.message
+      if (!msg || (msg.role !== 'user' && msg.role !== 'assistant')) {
+        return json(res, { error: 'message with role "user" or "assistant" required' }, 400)
+      }
+      if (typeof msg.content !== 'string') {
+        return json(res, { error: 'message.content must be a string' }, 400)
+      }
+      const entry = getOrCreateSession(sessionId)
+      if (msg.role === 'user') {
+        const m = { role: 'user' as const, content: msg.content }
+        addMessage(entry.state, m)
+        await recordTranscript(entry.state, m)
+      } else {
+        const m = { role: 'assistant' as const, content: msg.content }
+        addMessage(entry.state, m)
+        await recordTranscript(entry.state, m)
+      }
+      entry.lastActiveAt = new Date()
+      json(res, { ok: true })
       return
     }
 
@@ -837,6 +901,7 @@ export function createBlinoServer(config: ServerConfig) {
       })
     },
     stop(): Promise<void> {
+      userToolLoader.stop()
       return new Promise((resolve, reject) => {
         server.close(err => err ? reject(err) : resolve())
       })

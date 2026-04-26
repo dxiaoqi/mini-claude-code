@@ -4,6 +4,7 @@
  */
 import type { ChatMessage, ToolCallItem } from '@/components/MessageItem'
 import { thinkingFromAssistantText } from '@/lib/redacted-thinking'
+import { parseBlinoWfFromAssistantString, type BlinoWfMetaV1 } from '@/lib/session-ui-sync'
 
 type ApiMsg = { role: string; content: unknown }
 
@@ -140,7 +141,7 @@ function mergeConsecutiveAssistantRows(rows: ChatMessage[]): ChatMessage[] {
       continue
     }
     const prev = out[out.length - 1]
-    if (prev?.role === 'assistant') {
+    if (prev?.role === 'assistant' && !prev.workflowNoMerge && !row.workflowNoMerge) {
       out[out.length - 1] = mergeAssistantPair(prev, row)
     } else {
       out.push({ ...row })
@@ -187,7 +188,24 @@ export function apiMessagesToChatMessages(messages: ApiMsg[], sessionId: string)
     if (m.role !== 'user' && m.role !== 'assistant') continue
 
     if (m.role === 'assistant') {
-      const { content, toolCalls, thinkText } = parseAssistantBlocks(m.content)
+      let source: unknown = m.content
+      let wfMeta: BlinoWfMetaV1 | undefined
+      if (typeof m.content === 'string') {
+        const parsed = parseBlinoWfFromAssistantString(m.content)
+        source = parsed.content
+        wfMeta = parsed.meta
+      }
+      const { content, toolCalls, thinkText } = parseAssistantBlocks(source)
+      const wfExtras: Partial<ChatMessage> = wfMeta
+        ? {
+            workflowNoMerge: true,
+            ...(wfMeta.k === 'h' ? { workflowHost: true } : {}),
+            ...(wfMeta.k === 'd'
+              ? { workflowComplete: true, ...(wfMeta.r ? { workflowRunId: wfMeta.r } : {}) }
+              : {}),
+            ...(wfMeta.k === 'f' && wfMeta.r ? { workflowRunId: wfMeta.r } : {}),
+          }
+        : {}
       const chat: ChatMessage = {
         id: `sess_${sessionId.slice(0, 8)}_${idx}`,
         role: 'assistant',
@@ -195,6 +213,7 @@ export function apiMessagesToChatMessages(messages: ApiMsg[], sessionId: string)
         timestamp: Date.now() - (messages.length - idx) * 100,
         ...(toolCalls.length ? { toolCalls } : {}),
         ...(thinkText ? { thinkText } : {}),
+        ...wfExtras,
       }
       out.push(chat)
       lastAssistant = chat

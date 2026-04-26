@@ -126,6 +126,38 @@ export function subscribeWorkflowEvents(
   let es: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
+  const tryRecoverFromSnapshot = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(
+        `${BLINO_SERVER}/workflow/snapshot/${encodeURIComponent(runId)}`,
+        { method: 'GET' },
+      )
+      if (!res.ok) return false
+      const data = (await res.json()) as { nodes?: Record<string, { status?: string }> }
+      const nodes = data?.nodes
+      if (!nodes || Object.keys(nodes).length === 0) return false
+      let anyRunning = false
+      let anyFailed = false
+      for (const n of Object.values(nodes)) {
+        const st = n?.status
+        if (st === 'pending' || st === 'running') {
+          anyRunning = true
+          break
+        }
+        if (st === 'failed') anyFailed = true
+      }
+      if (anyRunning) return false
+      onEvent({
+        type: 'workflow_complete',
+        runId,
+        status: anyFailed ? 'failed' : 'done',
+      } as WorkflowEvent)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const connect = () => {
     if (closed) return
     try {
@@ -148,7 +180,12 @@ export function subscribeWorkflowEvents(
       if (closed) return
       attempts += 1
       if (attempts > maxAttempts) {
-        onError?.(new Error('SSE: max reconnect attempts'))
+        void (async () => {
+          const recovered = await tryRecoverFromSnapshot()
+          if (!recovered) {
+            onError?.(new Error('SSE: max reconnect attempts'))
+          }
+        })()
         return
       }
       reconnectTimer = setTimeout(connect, 2000)

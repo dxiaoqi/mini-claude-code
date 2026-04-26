@@ -240,6 +240,8 @@ export interface DagCardState {
 /** 后台工作流任务（由 workflow-manager 维护，多任务并发） */
 export interface WorkflowTask {
   runId: string
+  /** 启动时绑定的 Blino session（供同步 ui-message、恢复 UI） */
+  sessionId: string
   workflowId: string
   workflowName: string
   /** 与 chat 中占位/结论消息对应 */

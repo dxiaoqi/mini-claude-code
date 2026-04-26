@@ -201,6 +201,10 @@ class WorkflowManagerService implements WorkflowManager {
       return
     }
     if (type === 'workflow_complete') {
+      const before = this.tasks.get(runId)
+      if (before && (before.status === 'done' || before.status === 'failed')) {
+        return
+      }
       const u = this.unsubs.get(runId)
       u?.()
       this.unsubs.delete(runId)
@@ -226,6 +230,24 @@ class WorkflowManagerService implements WorkflowManager {
           finalNodeId: nodeId,
         }
       })
+      const final = this.tasks.get(runId)
+      if (typeof globalThis !== 'undefined' && 'dispatchEvent' in globalThis) {
+        try {
+          ;(globalThis as unknown as { dispatchEvent: (e: Event) => boolean }).dispatchEvent(
+            new CustomEvent('blino:workflow:terminal', {
+              detail: {
+                runId,
+                status: final?.status,
+                workflowName: final?.workflowName,
+                sessionId: final?.sessionId,
+                lastError: final?.lastError,
+              },
+            }),
+          )
+        } catch {
+          /* */
+        }
+      }
     }
   }
 
@@ -248,6 +270,7 @@ class WorkflowManagerService implements WorkflowManager {
     }
     const task: WorkflowTask = {
       runId,
+      sessionId,
       workflowId: workflow.id,
       workflowName: workflow.name,
       messageId,
