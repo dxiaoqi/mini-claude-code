@@ -2,6 +2,7 @@
  * 工作流 DAG 引擎：拓扑顺序、单线程执行、子 Agent 节点、快照持久化
  */
 import readline from 'node:readline'
+import { randomUUID } from 'node:crypto'
 import { createAgentTool } from '../tools/agent/AgentTool.js'
 import { dateContextProvider } from '../context/providers/dateContext.js'
 import type {
@@ -51,7 +52,10 @@ async function waitHilHttp(
     { id: 'approve', label: '批准' },
     { id: 'reject', label: '拒绝' },
   ]
-  onLog(`[workflow] HIL: waiting for UI approval (node ${node.id})…`)
+  // Generate a unique waiterId per HIL invocation to prevent cross-run or
+  // duplicate-node-id collisions in the EventBus waiter list.
+  const waiterId = randomUUID()
+  onLog(`[workflow] HIL: waiting for UI approval (node ${node.id}, waiterId=${waiterId})…`)
   eventBus.emit('workflow_event', {
     id: runId,
     type: 'hil_suspend',
@@ -61,9 +65,9 @@ async function waitHilHttp(
     totalNodes,
     question,
     options,
+    waiterId,
   })
-  const matchId = `${runId}#${node.id}`
-  const p = (await eventBus.waitFor('workflow_hil_resume', matchId)) as {
+  const p = (await eventBus.waitFor('workflow_hil_resume', waiterId)) as {
     id: string
     decision?: string
   }

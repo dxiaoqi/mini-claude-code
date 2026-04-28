@@ -220,6 +220,8 @@ export interface HILState {
   decided: boolean
   decision?: 'approve' | 'reject'
   decidedAt?: string
+  /** Unique per HIL invocation — used as matchId in EventBus to prevent cross-run collisions */
+  waiterId?: string
 }
 
 /** @deprecated 使用 HILState */
@@ -273,6 +275,8 @@ export interface WorkflowToast {
   finalResult?: string
   errorMessage?: string
   autoCloseMs?: number
+  /** Unique per HIL invocation — passed back to server to avoid cross-run collisions */
+  waiterId?: string
 }
 
 export type SlashCommandCategory = 'workflow' | 'skill' | 'session' | 'settings'
@@ -306,6 +310,8 @@ export interface WorkflowEvent {
   options?: Array<{ id: string; label: string }>
   status?: 'done' | 'failed'
   id?: string
+  /** Unique per HIL invocation, present on hil_suspend events */
+  waiterId?: string
 }
 
 export type WorkflowBubbleType =

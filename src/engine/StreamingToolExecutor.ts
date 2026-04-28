@@ -17,6 +17,8 @@ import { findToolByName } from '../tools/registry.js'
 import { takeSnapshot } from '../state/fileHistory.js'
 import { resolve, isAbsolute } from 'node:path'
 import { handleSilentError } from '../errors/handlers.js'
+import { runPostToolUseHooks } from '../utils/hooks.js'
+import type { HooksSettings } from '../utils/hooks.js'
 
 interface TrackedTool {
   block: ToolUseBlock
@@ -198,6 +200,16 @@ export class StreamingToolExecutor {
 
       tracked.status = 'completed'
       tracked.result = resultBlock as ToolResultBlock
+
+      // Run PostToolUse hooks (fire-and-forget, errors are swallowed)
+      const hooksSettings = this.toolContext.sessionState.settings?.hooks as HooksSettings | undefined
+      if (hooksSettings?.PostToolUse?.length) {
+        const outputStr = typeof resultBlock.content === 'string'
+          ? resultBlock.content
+          : JSON.stringify(resultBlock.content)
+        runPostToolUseHooks(hooksSettings, tool, block.input, outputStr, this.toolContext.cwd).catch(() => {})
+      }
+
       return tracked.result
     } catch (err) {
       this.hasErrored = true

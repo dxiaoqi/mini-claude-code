@@ -4,7 +4,7 @@
  * 主入口以协调者为角色：仅暴露 Agent、SendMessage、Task 等编排工具，通过 agentLoop
  * 为子任务生成独立工作者上下文（全量开发工具）；可配置 MCP 服务名、最大轮次等。
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type {
@@ -118,13 +118,18 @@ export async function* runCoordinatorMode(
 
   let result: AgentLoopResult = { reason: 'completed', turnCount: 0 }
 
-  for (;;) {
-    const iterResult = await loop.next()
-    if (iterResult.done) {
-      result = iterResult.value as AgentLoopResult
-      break
+  try {
+    for (;;) {
+      const iterResult = await loop.next()
+      if (iterResult.done) {
+        result = iterResult.value as AgentLoopResult
+        break
+      }
+      yield iterResult.value
     }
-    yield iterResult.value
+  } finally {
+    // Clean up scratchpad directory regardless of success or failure
+    await rm(scratchpadDir, { recursive: true, force: true }).catch(() => {})
   }
 
   return result

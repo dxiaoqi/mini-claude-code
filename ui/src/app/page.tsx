@@ -401,6 +401,7 @@ export default function HomePage() {
             nodeId: h.nodeId,
             question: h.question,
             options: h.options,
+            waiterId: h.waiterId,
           },
         ])
       }
@@ -615,6 +616,23 @@ export default function HomePage() {
         content: `⬡ ${workflow.name} · 运行中…`,
         isStreaming: false,
       })
+
+      // Write the host bubble to the backend now that we have the runId.
+      // This lets apiMessagesToChatMessages deduplicate host+done pairs on refresh.
+      if (sessionId) {
+        void appendSessionUiMessage(BLINO_URL, sessionId, {
+          role: 'assistant',
+          content: withBlinoWfPrefix(`工作流：**${workflow.name}**`, {
+            v: 1,
+            k: 'h',
+            wn: workflow.name,
+            i: workflow.id,
+            r: runId,
+            nm: true,
+          }),
+        })
+      }
+
       setWorkflowFormDrafts(prev => {
         const n = { ...prev }
         delete n[messageId]
@@ -684,18 +702,8 @@ export default function HomePage() {
         workflowHost: true,
         isStreaming: false,
       })
-      if (sessionId) {
-        void appendSessionUiMessage(BLINO_URL, sessionId, {
-          role: 'assistant',
-          content: withBlinoWfPrefix(`工作流：**${merged.name}**`, {
-            v: 1,
-            k: 'h',
-            wn: merged.name,
-            i: merged.id,
-            nm: true,
-          }),
-        })
-      }
+      // Note: backend ui-message for the host bubble is written after start()
+      // so we can include the runId, enabling deduplication on page refresh.
       setWorkflowFormDrafts(prev => ({
         ...prev,
         [msgId]: {
@@ -716,13 +724,14 @@ export default function HomePage() {
   const handleWorkflowToastHil = useCallback(
     async (toastId: string, runId: string, nodeId: string, decision: 'approve' | 'reject') => {
       try {
-        await workflowManager.decide(runId, nodeId, decision)
+        const toast = workflowToasts.find(t => t.id === toastId)
+        await workflowManager.decide(runId, nodeId, decision, toast?.waiterId)
         setWorkflowToasts(prev => prev.filter(t => t.id !== toastId))
       } catch {
         appendSystemBubble('无法发送工作流决策，请重试')
       }
     },
-    [appendSystemBubble],
+    [appendSystemBubble, workflowToasts],
   )
 
   const dismissWorkflowToast = useCallback((id: string) => {
@@ -835,8 +844,23 @@ export default function HomePage() {
       const stateData = await stateRes.json() as { messages?: Array<{ role: string; content: unknown }> }
       const chat = apiMessagesToChatMessages(stateData.messages ?? [], id)
       setMessages(chat)
+
+      // Reattach to any workflows that were running when the page was refreshed.
+      const reattached = await workflowManager.reattach(
+        chat.map(m => ({ id: m.id, workflowRunId: m.workflowRunId, workflowPlaceholder: m.workflowPlaceholder, workflowHost: m.workflowHost })),
+      )
+      // Mark reattached workflow messages as placeholders so completion updates them correctly.
+      for (const { messageId, runId, workflowName } of reattached) {
+        updateMessage(messageId, {
+          workflowHost: false,
+          workflowPlaceholder: true,
+          workflowRunId: runId,
+          content: `⬡ ${workflowName} · 运行中…`,
+          isStreaming: false,
+        })
+      }
     } catch { /* ignore */ }
-  }, [isLoading, resetInProgress, fetchVisualContextBody])
+  }, [isLoading, resetInProgress, fetchVisualContextBody, updateMessage])
 
   const switchToSessionRef = useRef(switchToSession)
   switchToSessionRef.current = switchToSession

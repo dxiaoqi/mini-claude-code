@@ -849,18 +849,24 @@ export async function createBlinoServer(config: ServerConfig) {
       const body = await readBody(req) as {
         decision?: 'approve' | 'reject'
         nodeId?: string
+        waiterId?: string
       }
-      const nodeId = body.nodeId
       const decision = body.decision
-      if (!nodeId || (decision !== 'approve' && decision !== 'reject')) {
-        json(res, { error: 'nodeId and decision (approve|reject) required' }, 400)
+      if (decision !== 'approve' && decision !== 'reject') {
+        json(res, { error: 'decision (approve|reject) required' }, 400)
         return
       }
-      const matchId = `${runId}#${nodeId}`
+      // Prefer waiterId (unique per HIL invocation) to avoid cross-run collisions.
+      // Fall back to legacy runId#nodeId for older clients that don't send waiterId.
+      const matchId = body.waiterId ?? `${runId}#${body.nodeId}`
+      if (!body.waiterId && !body.nodeId) {
+        json(res, { error: 'waiterId or nodeId required' }, 400)
+        return
+      }
       eventBus.emit('workflow_hil_resume', {
         id: matchId,
         runId,
-        nodeId,
+        nodeId: body.nodeId,
         decision,
       })
       json(res, { ok: true })

@@ -102,11 +102,12 @@ export async function resumeWorkflow(
   runId: string,
   nodeId: string,
   decision: 'approve' | 'reject',
+  waiterId?: string,
 ): Promise<void> {
   const res = await fetch(`${BLINO_SERVER}/workflow/resume/${encodeURIComponent(runId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ decision, nodeId }),
+    body: JSON.stringify({ decision, nodeId, waiterId }),
   })
   if (!res.ok) throw new Error(`resumeWorkflow: ${res.status}`)
 }

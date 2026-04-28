@@ -48,6 +48,8 @@ import { withRetry, withFallback } from './api/retry.js'
 import { findAvailablePort, readServerLock, writeServerLock, registerLockCleanup } from './utils/portManager.js'
 import { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
 import { resolveApiConfig, loadSettings, persistPermissionRules, showConfig, saveApiConfig } from './utils/config.js'
+import { UserToolLoader } from './tools/user/UserToolLoader.js'
+import { mergeTools } from './tools/user/mergeTools.js'
 import { apiCompact } from './compact/apiCompact.js'
 import { estimateMessagesTokens } from './compact/tokenEstimator.js'
 import { flushTranscript } from './state/transcript.js'
@@ -58,7 +60,7 @@ import { formatCost, formatTokens, estimateCost } from './utils/cost.js'
 import type { APIClient, ContextProvider, Message, Settings, Tool } from './types.js'
 import { createLogger } from './logging/index.js'
 import chalk from 'chalk'
-import { BLINO_TILDE_ROOT } from './constants/blinoPaths.js'
+import { BLINO_TILDE_ROOT, BLINO_PROJECT_SUB, resolveProjectBlinoPath } from './constants/blinoPaths.js'
 
 const VERSION = '0.1.0'
 
@@ -225,6 +227,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       model,
       permissionMode: bypassPermissions ? 'bypass' : (isPipe ? 'bypass' : 'default'),
       permissionRules: fileSettings.permissionRules,
+      hooks: fileSettings.hooks,
       logger,
     },
   })
@@ -310,7 +313,10 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
   ]
 
   // 组装完整工具列表
-  const allBaseTools = [...coreTools, ...deferredTools, ...mcpTools]
+  const userToolsDir = resolveProjectBlinoPath(cwd, BLINO_PROJECT_SUB.tools)
+  const userToolLoader = new UserToolLoader(userToolsDir)
+  await userToolLoader.start()
+  const allBaseTools = mergeTools([...coreTools, ...deferredTools, ...mcpTools], userToolLoader.getTools())
   const toolSearchTool = createToolSearchTool(allBaseTools)
 
   // AgentTool：子 Agent 权限策略

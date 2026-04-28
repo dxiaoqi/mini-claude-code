@@ -1,5 +1,5 @@
 import type { DagCardState, WorkflowEvent, WorkflowSummary, WorkflowTask } from './types'
-import { getWorkflowDetail, resumeWorkflow, runWorkflow, subscribeWorkflowEvents } from './workflow-client'
+import { getWorkflowDetail, listRunningWorkflows, resumeWorkflow, runWorkflow, subscribeWorkflowEvents } from './workflow-client'
 import { topologicalNodeIds } from './workflow-topo'
 
 function extractFinalResult(
@@ -59,7 +59,14 @@ export interface WorkflowManager {
   }) => Promise<string>
   getTasks: () => WorkflowTask[]
   subscribe: (handler: (tasks: WorkflowTask[]) => void) => () => void
-  decide: (runId: string, nodeId: string, decision: 'approve' | 'reject') => Promise<void>
+  decide: (runId: string, nodeId: string, decision: 'approve' | 'reject', waiterId?: string) => Promise<void>
+  /**
+   * Reattach to running workflows after page refresh.
+   * Fetches /workflow/list-running, rebuilds task state from snapshots,
+   * and re-subscribes to SSE for each active run.
+   * @param chatMessages - current chat messages to find matching messageId by workflowRunId
+   */
+  reattach: (chatMessages: Array<{ id: string; workflowRunId?: string; workflowPlaceholder?: boolean; workflowHost?: boolean }>) => Promise<Array<{ messageId: string; runId: string; workflowName: string }>>
   /** 新对话等场景清空任务与 SSE */
   reset: () => void
 }
@@ -165,6 +172,7 @@ class WorkflowManagerService implements WorkflowManager {
                 { id: 'reject', label: '拒绝' },
               ],
               decided: false,
+              waiterId: ev.waiterId,
             },
           },
         }
@@ -251,6 +259,99 @@ class WorkflowManagerService implements WorkflowManager {
     }
   }
 
+  async reattach(
+    chatMessages: Array<{ id: string; workflowRunId?: string; workflowPlaceholder?: boolean; workflowHost?: boolean }>,
+  ): Promise<Array<{ messageId: string; runId: string; workflowName: string }>> {
+    const running = await listRunningWorkflows()
+    if (running.length === 0) return []
+
+    const reattached: Array<{ messageId: string; runId: string; workflowName: string }> = []
+
+    await Promise.all(
+      running.map(async ({ runId, workflowId }) => {
+        // Skip if already tracked (e.g. called twice)
+        if (this.tasks.has(runId)) return
+
+        // Fetch snapshot for node states
+        let nodeStates: Record<string, { status: string; result?: string; error?: string }> = {}
+        try {
+          const snapRes = await fetch(
+            `${process.env.NEXT_PUBLIC_BLINO_URL || 'http://localhost:3001'}/workflow/snapshot/${encodeURIComponent(runId)}`,
+          )
+          if (snapRes.ok) {
+            const snap = (await snapRes.json()) as {
+              nodes?: Record<string, { status?: string; result?: string | null; error?: string }>
+            }
+            if (snap.nodes) {
+              for (const [id, n] of Object.entries(snap.nodes)) {
+                nodeStates[id] = {
+                  status: n.status ?? 'pending',
+                  ...(n.result != null ? { result: String(n.result) } : {}),
+                  ...(n.error ? { error: n.error } : {}),
+                }
+              }
+            }
+          }
+        } catch { /* ignore — proceed with empty states */ }
+
+        // Fetch workflow metadata
+        const wf = await getWorkflowDetail(workflowId).catch(() => null)
+        const workflowName = wf?.name ?? workflowId
+        const orderIds = wf?.nodeIds ?? Object.keys(nodeStates)
+        const graphNodes = wf?.nodes ?? orderIds.map(id => ({ id, dependsOn: [] as string[] }))
+
+        // Find the matching chat message: prefer workflowRunId match, fall back to workflowHost
+        const matchingMsg = chatMessages.find(m => m.workflowRunId === runId)
+        const messageId = matchingMsg?.id ?? `reattached-${runId}`
+
+        const dagNodeStates: Record<string, import('./types').NodeState> = {}
+        for (const id of orderIds) {
+          const s = nodeStates[id]
+          dagNodeStates[id] = s
+            ? { status: s.status as import('./types').WorkflowNodeStateStatus, result: s.result, error: s.error }
+            : { status: 'pending' }
+        }
+
+        const task: WorkflowTask = {
+          runId,
+          sessionId: '',
+          workflowId,
+          workflowName,
+          messageId,
+          status: 'running',
+          startedAt: Date.now(),
+          workflow: { id: workflowId, name: workflowName, description: '', nodeCount: orderIds.length, nodeIds: orderIds, nodes: graphNodes },
+          nodeIds: orderIds,
+          dagState: {
+            workflowId,
+            workflowName,
+            runId,
+            nodeIds: orderIds,
+            nodeStates: dagNodeStates,
+            overallStatus: 'running',
+            inputValues: {},
+          },
+        }
+
+        this.tasks.set(runId, task)
+        this.emit()
+
+        const unsub = subscribeWorkflowEvents(
+          runId,
+          ev => {
+            const t = this.tasks.get(runId)
+            if (t) this.onServerEvent(t, ev)
+          },
+          () => { /* SSE errors */ },
+        )
+        this.unsubs.set(runId, unsub)
+        reattached.push({ messageId, runId, workflowName })
+      }),
+    )
+
+    return reattached
+  }
+
   async start(params: {
     workflow: WorkflowSummary
     sessionId: string
@@ -305,8 +406,8 @@ class WorkflowManagerService implements WorkflowManager {
     return r
   }
 
-  async decide(runId: string, nodeId: string, decision: 'approve' | 'reject'): Promise<void> {
-    await resumeWorkflow(runId, nodeId, decision)
+  async decide(runId: string, nodeId: string, decision: 'approve' | 'reject', waiterId?: string): Promise<void> {
+    await resumeWorkflow(runId, nodeId, decision, waiterId)
   }
 }
 

@@ -199,7 +199,9 @@ export function apiMessagesToChatMessages(messages: ApiMsg[], sessionId: string)
       const wfExtras: Partial<ChatMessage> = wfMeta
         ? {
             workflowNoMerge: true,
-            ...(wfMeta.k === 'h' ? { workflowHost: true } : {}),
+            ...(wfMeta.k === 'h'
+              ? { workflowHost: true, ...(wfMeta.r ? { workflowRunId: wfMeta.r } : {}) }
+              : {}),
             ...(wfMeta.k === 'd'
               ? { workflowComplete: true, ...(wfMeta.r ? { workflowRunId: wfMeta.r } : {}) }
               : {}),
@@ -215,6 +217,27 @@ export function apiMessagesToChatMessages(messages: ApiMsg[], sessionId: string)
         ...(thinkText ? { thinkText } : {}),
         ...wfExtras,
       }
+
+      // If this is a done/fail result for a workflow run, replace the matching
+      // host bubble (k:'h') in-place instead of appending a second entry.
+      // This prevents duplicate workflow cards after page refresh.
+      if (wfMeta && (wfMeta.k === 'd' || wfMeta.k === 'f') && wfMeta.r) {
+        const hostIdx = out.findIndex(
+          msg => msg.workflowHost && (msg as ChatMessage & { _wfRunId?: string })._wfRunId === wfMeta!.r,
+        )
+        if (hostIdx >= 0) {
+          out[hostIdx] = { ...out[hostIdx], ...chat, id: out[hostIdx].id }
+          lastAssistant = out[hostIdx]
+          idx += 1
+          continue
+        }
+      }
+
+      // Tag host bubbles with their runId so the done/fail pass above can find them.
+      if (wfMeta?.k === 'h' && wfMeta.r) {
+        (chat as ChatMessage & { _wfRunId?: string })._wfRunId = wfMeta.r
+      }
+
       out.push(chat)
       lastAssistant = chat
       idx += 1
