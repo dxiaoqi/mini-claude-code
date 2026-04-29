@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState, type CSSProperties } from 'react'
+import React, { useMemo, useState, type CSSProperties } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { topologicalNodeIds } from '@/lib/workflow-topo'
 import type { NodeState, DagCardState, WorkflowSummary, HILState } from '@/lib/types'
@@ -111,6 +111,123 @@ function NodeTextBlock({ text }: { text: string }) {
   )
 }
 
+function NodeRow({
+  id,
+  st,
+  boxStyle,
+  hasDetail,
+  isLast,
+  docked,
+}: {
+  id: string
+  st: NodeState
+  boxStyle: CSSProperties
+  hasDetail: boolean
+  isLast: boolean
+  docked: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const detail = st.status === 'done' ? st.result : st.status === 'failed' ? st.error : undefined
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        paddingLeft: 20,
+        paddingBottom: isLast ? 0 : 4,
+      }}
+    >
+      {/* Timeline dot */}
+      <span
+        style={{
+          position: 'absolute',
+          left: -5,
+          top: 10,
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: 'var(--bg-primary)',
+          border: `2px solid ${(boxStyle.border as string)?.split(' ')[2] ?? 'var(--border-default)'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1,
+        }}
+      />
+
+      <div
+        style={{
+          ...boxStyle,
+          borderRadius: 6,
+          padding: docked ? '6px 8px' : '7px 10px',
+          marginBottom: isLast ? 0 : 4,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <StatusIcon status={st.status} />
+          <span
+            style={{
+              fontSize: docked ? 11 : 12,
+              fontWeight: 600,
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {id}
+          </span>
+          <span style={{ fontSize: 10, opacity: 0.75, flexShrink: 0 }}>
+            {st.status === 'waiting' ? '等待审批' : STATUS_LABEL[st.status]}
+          </span>
+          {hasDetail && (
+            <button
+              type="button"
+              onClick={() => setOpen(o => !o)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                color: 'inherit',
+                opacity: 0.7,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              aria-label={open ? '收起' : '展开'}
+            >
+              {open
+                ? <ChevronDown size={12} strokeWidth={2.5} />
+                : <ChevronRight size={12} strokeWidth={2.5} />
+              }
+            </button>
+          )}
+        </div>
+
+        {open && detail && (
+          <div
+            style={{
+              marginTop: 6,
+              paddingTop: 6,
+              borderTop: `1px solid ${(boxStyle.border as string)?.split(' ')[2] ?? 'var(--border-default)'}`,
+              fontSize: 11,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 200,
+              overflowY: 'auto',
+            }}
+          >
+            {detail}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ArrowConn() {
   return (
     <div
@@ -171,6 +288,8 @@ export interface WorkflowDAGCardProps {
   onHILDecide: (nodeId: string, decision: 'approve' | 'reject') => void
   /** 项目侧只读：仅展示 DAG，不在此 HIL（审批走 toast） */
   readOnly?: boolean
+  /** 初始折叠状态，默认 false */
+  initialCollapsed?: boolean
 }
 
 export function WorkflowDAGCard({
@@ -185,8 +304,9 @@ export function WorkflowDAGCard({
   onFormCancel,
   onHILDecide,
   readOnly = false,
+  initialCollapsed = false,
 }: WorkflowDAGCardProps) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(initialCollapsed)
   const inputs = workflow.inputs ?? []
   const graphNodes = workflow.nodes?.length
     ? workflow.nodes
@@ -213,7 +333,7 @@ export function WorkflowDAGCard({
         title={order.join(' → ')}
       >
         {order.map((id, i) => (
-          <Fragment key={`${id}-${i}`}>
+          <React.Fragment key={`${id}-${i}`}>
             {i > 0 && <HeaderChainArrow />}
             <span
               style={{
@@ -228,7 +348,7 @@ export function WorkflowDAGCard({
             >
               {id}
             </span>
-          </Fragment>
+          </React.Fragment>
         ))}
       </div>
     ),
@@ -437,43 +557,27 @@ export function WorkflowDAGCard({
                 <div
                   style={{
                     display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'flex-start',
+                    flexDirection: 'column',
                     gap: 0,
+                    borderLeft: '2px solid var(--border-default)',
+                    marginLeft: 6,
+                    paddingLeft: 0,
                   }}
                 >
                   {order.map((id, i) => {
                     const st = nodeStates[id] ?? { status: 'pending' as const }
-                    const style = nodeBoxStyle(st.status)
+                    const boxStyle = nodeBoxStyle(st.status)
+                    const hasDetail = (st.status === 'done' && st.result != null) || (st.status === 'failed' && st.error)
                     return (
-                      <Fragment key={id}>
-                        {i > 0 && <ArrowConn />}
-                        <div
-                          style={{
-                            ...style,
-                            borderRadius: 8,
-                            padding: '10px 8px 8px',
-                            minWidth: 110,
-                            maxWidth: 160,
-                            flex: '0 0 auto',
-                            boxSizing: 'border-box',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                            <div style={{ paddingTop: 2 }}>
-                              <StatusIcon status={st.status} />
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, wordBreak: 'break-all' }}>{id}</div>
-                              <div style={{ fontSize: 10, opacity: 0.9 }}>
-                                {st.status === 'waiting' ? '等待审批' : STATUS_LABEL[st.status]}
-                              </div>
-                              {st.status === 'done' && st.result != null && <NodeTextBlock text={st.result} />}
-                              {st.status === 'failed' && st.error && <NodeTextBlock text={st.error} />}
-                            </div>
-                          </div>
-                        </div>
-                      </Fragment>
+                      <NodeRow
+                        key={id}
+                        id={id}
+                        st={st}
+                        boxStyle={boxStyle}
+                        hasDetail={!!hasDetail}
+                        isLast={i === order.length - 1}
+                        docked={docked}
+                      />
                     )
                   })}
                 </div>

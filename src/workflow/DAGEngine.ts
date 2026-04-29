@@ -17,7 +17,7 @@ import { logSubagentDebug } from '../utils/subagentDebug.js'
 import type { AgentToolSuccessOutput } from '../tools/agent/AgentTool.js'
 import { eventBus } from '../events/EventBus.js'
 import { readWorkflowSnapshotFile, writeWorkflowSnapshotFile, buildSnapshotPayload } from './snapshotFile.js'
-import { topologicalOrder } from './topo.js'
+import { topologicalWaves } from './topo.js'
 import type { NodeDef, WorkflowDef, WorkflowNodeSnapshot, WorkflowSnapshotFile } from './types.js'
 
 export function interpolatePrompt(prompt: string, inputs: Record<string, string>): string {
@@ -211,8 +211,8 @@ export async function runDagWorkflow(params: DAGEngineParams): Promise<{ ok: boo
 
   await persist()
 
-  const order = topologicalOrder(def.nodes)
-  const totalNodes = order.length
+  const waves = topologicalWaves(def.nodes)
+  const totalNodes = def.nodes.length
   const subToolList = tools.filter(t => t.name !== 'Agent')
   const canUseTool = async () => ({ behavior: 'allow' as const })
   const agentTool = createAgentTool(apiClient, subToolList, [...contextProviders, dateContextProvider], canUseTool)
@@ -225,170 +225,169 @@ export async function runDagWorkflow(params: DAGEngineParams): Promise<{ ok: boo
     options: { tools: subToolList, mainModel: state.model },
   }
 
-  for (const node of order) {
-    const nodeIndex = order.findIndex(n => n.id === node.id)
-    if (snap[node.id].status === 'done') {
-      onLog(`[workflow] node ${node.id}: skipped (snapshot found)`)
-      const prev = snap[node.id]
-      const r = prev.status === 'done' ? prev.result : ''
+  // Track global node index for UI events
+  let globalNodeIndex = 0
+
+  for (const wave of waves) {
+    // Run all nodes in this wave concurrently
+    const waveResults = await Promise.all(wave.map(async (node) => {
+      const nodeIndex = globalNodeIndex++
+
+      if (snap[node.id].status === 'done') {
+        onLog(`[workflow] node ${node.id}: skipped (snapshot found)`)
+        const prev = snap[node.id]
+        const r = prev.status === 'done' ? prev.result : ''
+        emitWorkflowEvent(runId, { type: 'node_start', nodeId: node.id, nodeIndex, totalNodes })
+        emitWorkflowEvent(runId, { type: 'node_done', nodeId: node.id, result: r })
+        return { ok: true as const, nodeId: node.id }
+      }
+
+      for (const d of node.dependsOn) {
+        const st = snap[d]?.status
+        if (st === 'failed') {
+          const msg = `Blocked: dependency "${d}" failed`
+          snap[node.id] = {
+            status: 'failed',
+            result: null,
+            error: msg,
+            finishedAt: new Date().toISOString(),
+          }
+          onLog(`[workflow] node ${node.id} ${msg}`)
+          return { ok: false as const, nodeId: node.id, error: msg, abortAll: true }
+        }
+        if (st !== 'done') {
+          const msg = `Invalid state: "${d}" is ${st}, expected done`
+          snap[node.id] = {
+            status: 'failed',
+            result: null,
+            error: msg,
+            finishedAt: new Date().toISOString(),
+          }
+          onLog(`[workflow] node ${node.id} ${msg}`)
+          return { ok: false as const, nodeId: node.id, error: msg, abortAll: true }
+        }
+      }
+
+      if (node.hilRequired) {
+        try {
+          if (hilMode === 'http') {
+            await waitHilHttp(runId, node, nodeIndex, totalNodes, onLog)
+          } else {
+            await waitHilContinue(onLog)
+          }
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e)
+          snap[node.id] = {
+            status: 'failed',
+            result: null,
+            error: errMsg,
+            finishedAt: new Date().toISOString(),
+          }
+          onLog(`[workflow] node ${node.id} HIL: ${errMsg}`)
+          return { ok: false as const, nodeId: node.id, error: errMsg, abortAll: true }
+        }
+      }
+
       emitWorkflowEvent(runId, { type: 'node_start', nodeId: node.id, nodeIndex, totalNodes })
-      emitWorkflowEvent(runId, { type: 'node_done', nodeId: node.id, result: r })
-      continue
-    }
 
-    for (const d of node.dependsOn) {
-      const st = snap[d]?.status
-      if (st === 'failed') {
-        const msg = `Blocked: dependency "${d}" failed`
-        snap[node.id] = {
-          status: 'failed',
-          result: null,
-          error: msg,
-          finishedAt: new Date().toISOString(),
-        }
-        onLog(`[workflow] node ${node.id} ${msg}`)
-        markPendingNodesAfterAbort(snap, def.nodes, d, 'blocked_dependency')
-        emitWorkflowEvent(runId, { type: 'workflow_error', runId, nodeId: node.id, error: msg })
-        emitWorkflowEvent(runId, { type: 'workflow_complete', runId, status: 'failed' })
-        await persist()
-        return { ok: false, lastError: msg }
+      onLog(`[workflow] node ${node.id} running…`)
+      snap[node.id] = {
+        status: 'running',
+        startedAt: new Date().toISOString(),
       }
-      if (st !== 'done') {
-        const msg = `Invalid state: "${d}" is ${st}, expected done`
-        snap[node.id] = {
-          status: 'failed',
-          result: null,
-          error: msg,
-          finishedAt: new Date().toISOString(),
-        }
-        onLog(`[workflow] node ${node.id} ${msg}`)
-        markPendingNodesAfterAbort(snap, def.nodes, d, 'invalid_state')
-        emitWorkflowEvent(runId, { type: 'workflow_error', runId, nodeId: node.id, error: msg })
-        emitWorkflowEvent(runId, { type: 'workflow_complete', runId, status: 'failed' })
-        await persist()
-        return { ok: false, lastError: msg }
-      }
-    }
 
-    if (node.hilRequired) {
+      const finalPrompt = composeNodePrompt(node, snap, inputValues)
+      const input = {
+        prompt: finalPrompt,
+        allowed_tools: node.allowedTools,
+      }
+
+      const toolMode =
+        input.allowed_tools === undefined
+          ? 'all'
+          : input.allowed_tools.length === 0
+            ? 'none'
+            : 'whitelist'
+      logSubagentDebug(`workflow:${node.id}`, 'invoke agentTool', {
+        promptChars: finalPrompt.length,
+        toolMode,
+        allowedNames: input.allowed_tools,
+        subTools: subToolList.length,
+      })
+
+      const toolContext: ToolContext = { ...toolContextBase, workflowNodeId: node.id }
+
       try {
-        if (hilMode === 'http') {
-          await waitHilHttp(runId, node, nodeIndex, totalNodes, onLog)
-        } else {
-          await waitHilContinue(onLog)
+        const out = await agentTool.call(
+          input,
+          toolContext,
+          canUseTool,
+          parentMessage,
+          undefined,
+        )
+        const data = out.data as AgentToolSuccessOutput
+        const cur = snap[node.id]
+        const startedAt = cur.status === 'running' ? cur.startedAt : undefined
+        const noText = !!(data.emptyOutput || (data.result ?? '').trim() === '')
+        if (noText && data.stopReason === 'content_filter') {
+          const errMsg = 'content_filter: model refused output'
+          snap[node.id] = {
+            status: 'failed',
+            result: null,
+            error: errMsg,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+          }
+          onLog(`[workflow] node ${node.id} failed: ${errMsg}`)
+          return { ok: false as const, nodeId: node.id, error: errMsg, abortAll: true }
         }
+        if (data.emptyOutput) {
+          snap[node.id] = {
+            status: 'done',
+            result: '',
+            emptyOutput: true,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+          }
+        } else {
+          snap[node.id] = {
+            status: 'done',
+            result: data.result,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+          }
+        }
+        emitWorkflowEvent(runId, { type: 'node_done', nodeId: node.id, result: data.emptyOutput ? '' : data.result })
+        onLog(`[workflow] node ${node.id} done`)
+        return { ok: true as const, nodeId: node.id }
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e)
+        const curFail = snap[node.id]
+        const failStarted = curFail.status === 'running' ? curFail.startedAt : undefined
         snap[node.id] = {
           status: 'failed',
           result: null,
           error: errMsg,
-          finishedAt: new Date().toISOString(),
-        }
-        onLog(`[workflow] node ${node.id} HIL: ${errMsg}`)
-        markPendingNodesAfterAbort(snap, def.nodes, node.id, 'direct_failure')
-        emitWorkflowEvent(runId, { type: 'workflow_error', nodeId: node.id, error: errMsg })
-        emitWorkflowEvent(runId, { type: 'workflow_complete', status: 'failed' })
-        await persist()
-        return { ok: false, lastError: errMsg }
-      }
-    }
-
-    emitWorkflowEvent(runId, { type: 'node_start', nodeId: node.id, nodeIndex, totalNodes })
-
-    onLog(`[workflow] node ${node.id} running…`)
-    snap[node.id] = {
-      status: 'running',
-      startedAt: new Date().toISOString(),
-    }
-    await persist()
-
-    const finalPrompt = composeNodePrompt(node, snap, inputValues)
-    const input = {
-      prompt: finalPrompt,
-      allowed_tools: node.allowedTools,
-    }
-
-    const toolMode =
-      input.allowed_tools === undefined
-        ? 'all'
-        : input.allowed_tools.length === 0
-          ? 'none'
-          : 'whitelist'
-    logSubagentDebug(`workflow:${node.id}`, 'invoke agentTool', {
-      promptChars: finalPrompt.length,
-      toolMode,
-      allowedNames: input.allowed_tools,
-      subTools: subToolList.length,
-    })
-
-    const toolContext: ToolContext = { ...toolContextBase, workflowNodeId: node.id }
-
-    try {
-      const out = await agentTool.call(
-        input,
-        toolContext,
-        canUseTool,
-        parentMessage,
-        undefined,
-      )
-      const data = out.data as AgentToolSuccessOutput
-      const cur = snap[node.id]
-      const startedAt = cur.status === 'running' ? cur.startedAt : undefined
-      const noText = !!(data.emptyOutput || (data.result ?? '').trim() === '')
-      if (noText && data.stopReason === 'content_filter') {
-        const errMsg = 'content_filter: model refused output'
-        snap[node.id] = {
-          status: 'failed',
-          result: null,
-          error: errMsg,
-          startedAt,
+          startedAt: failStarted,
           finishedAt: new Date().toISOString(),
         }
         onLog(`[workflow] node ${node.id} failed: ${errMsg}`)
-        markPendingNodesAfterAbort(snap, def.nodes, node.id, 'direct_failure')
-        emitWorkflowEvent(runId, { type: 'workflow_error', nodeId: node.id, error: errMsg })
-        emitWorkflowEvent(runId, { type: 'workflow_complete', status: 'failed' })
-        await persist()
-        return { ok: false, lastError: errMsg }
+        return { ok: false as const, nodeId: node.id, error: errMsg, abortAll: true }
       }
-      if (data.emptyOutput) {
-        snap[node.id] = {
-          status: 'done',
-          result: '',
-          emptyOutput: true,
-          startedAt,
-          finishedAt: new Date().toISOString(),
-        }
-      } else {
-        snap[node.id] = {
-          status: 'done',
-          result: data.result,
-          startedAt,
-          finishedAt: new Date().toISOString(),
-        }
-      }
-      emitWorkflowEvent(runId, { type: 'node_done', nodeId: node.id, result: data.emptyOutput ? '' : data.result })
-      onLog(`[workflow] node ${node.id} done`)
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e)
-      const curFail = snap[node.id]
-      const failStarted = curFail.status === 'running' ? curFail.startedAt : undefined
-      snap[node.id] = {
-        status: 'failed',
-        result: null,
-        error: errMsg,
-        startedAt: failStarted,
-        finishedAt: new Date().toISOString(),
-      }
-      onLog(`[workflow] node ${node.id} failed: ${errMsg}`)
-      markPendingNodesAfterAbort(snap, def.nodes, node.id, 'direct_failure')
-      emitWorkflowEvent(runId, { type: 'workflow_error', nodeId: node.id, error: errMsg })
-      emitWorkflowEvent(runId, { type: 'workflow_complete', status: 'failed' })
-      await persist()
-      return { ok: false, lastError: errMsg }
-    }
+    }))
+
+    // Persist snapshot after each wave
     await persist()
+
+    // Check if any node in this wave failed
+    const failed = waveResults.find(r => !r.ok)
+    if (failed && !failed.ok) {
+      markPendingNodesAfterAbort(snap, def.nodes, failed.nodeId, 'direct_failure')
+      emitWorkflowEvent(runId, { type: 'workflow_error', runId, nodeId: failed.nodeId, error: failed.error })
+      emitWorkflowEvent(runId, { type: 'workflow_complete', runId, status: 'failed' })
+      await persist()
+      return { ok: false, lastError: failed.error }
+    }
   }
 
   emitWorkflowEvent(runId, { type: 'workflow_complete', status: 'done' })

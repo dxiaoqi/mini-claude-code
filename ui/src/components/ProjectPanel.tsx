@@ -135,6 +135,7 @@ export function ProjectPanel({ open, onClose, tasks }: ProjectPanelProps) {
                     <WorkflowDAGCard
                       docked
                       readOnly
+                      initialCollapsed
                       workflow={t.workflow}
                       dagState={t.dagState}
                       formValues={t.dagState.inputValues}

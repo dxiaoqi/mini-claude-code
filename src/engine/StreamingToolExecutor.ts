@@ -181,12 +181,24 @@ export class StreamingToolExecutor {
     }
 
     try {
-      const toolResult = await tool.call(
+      const callPromise = tool.call(
         block.input as never,
         this.toolContext,
         this.canUseTool,
         this.assistantMessage,
       )
+
+      const toolResult = tool.timeoutMs
+        ? await Promise.race([
+            callPromise,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Tool "${tool.name}" timed out after ${tool.timeoutMs}ms`)),
+                tool.timeoutMs,
+              )
+            ),
+          ])
+        : await callPromise
 
       const resultBlock = tool.mapToolResultToToolResultBlockParam
         ? tool.mapToolResultToToolResultBlockParam(toolResult.data as never, block.id)

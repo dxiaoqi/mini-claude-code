@@ -157,6 +157,8 @@ export interface Tool<Input = any, Output = any> {
 
   isEnabled?(): boolean
   maxResultSizeChars?: number
+  /** Milliseconds before the tool call is aborted with a timeout error. Undefined = no limit. */
+  timeoutMs?: number
 
   mapToolResultToToolResultBlockParam?(
     output: Output,
