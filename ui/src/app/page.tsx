@@ -23,9 +23,15 @@ import { ModeToggle, type AppMode } from '@/components/ModeToggle'
 import { PermissionDialog, type PermissionRequest } from '@/components/PermissionDialog'
 import { SessionMenu } from '@/components/SessionMenu'
 import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
-import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags } from '@/lib/redacted-thinking'
+import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags, stripSvgTextWrapperTagsStreaming } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
 import { appendSessionUiMessage, withBlinoWfPrefix } from '@/lib/session-ui-sync'
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
 
 /** 未提交前：仅表单元数据（运行态在 workflowManager） */
 type WorkflowFormDraft = {
@@ -920,6 +926,22 @@ export default function HomePage() {
         setInProgressStatusMessage((event.message as string) || '')
         break
 
+      case 'compact': {
+        const c = event as { tokensBefore: number; tokensAfter: number; tokensFreed: number }
+        addMessage({
+          role: 'assistant',
+          content: '',
+          isStreaming: false,
+          isCompactDivider: true,
+          compactStats: {
+            tokensBefore: c.tokensBefore,
+            tokensAfter: c.tokensAfter,
+            tokensFreed: c.tokensFreed,
+          },
+        })
+        break
+      }
+
       // ── Agent / Artifacts — Text streaming ───────────────────────────────
 
       case 'text.delta': {
@@ -1013,7 +1035,7 @@ export default function HomePage() {
             if (m.id !== msgId) return m
             const full = m.content + chunk
             const { publicText, thinking } = splitRedactedThinking(full)
-            return { ...m, content: publicText, thinkText: thinking || undefined, isStreaming: true }
+            return { ...m, content: stripSvgTextWrapperTagsStreaming(publicText), thinkText: thinking || undefined, isStreaming: true }
           }))
         }
         break
@@ -1190,7 +1212,7 @@ export default function HomePage() {
                 const { publicText, thinking } = splitRedactedThinking(m.content)
                 return {
                   ...m,
-                  content: publicText,
+                  content: stripSvgTextWrapperTags(publicText),
                   thinkText: [m.thinkText, thinking].filter(Boolean).join('\n\n') || undefined,
                   isStreaming: false,
                 }

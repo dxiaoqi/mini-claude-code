@@ -144,6 +144,16 @@ export class HttpServerAdapter implements UIAdapter {
         results.push({ type: 'agent.complete', agentId: event.agentId, result: event.result, usage: event.usage })
         break
 
+      case 'compact':
+        results.push({
+          type: 'compact',
+          tokensBefore: event.tokensBefore,
+          tokensAfter: event.tokensAfter,
+          tokensFreed: event.tokensFreed,
+          strategies: event.strategies,
+        })
+        break
+
       case 'error':
         results.push({ type: 'error.occurred', message: event.error.message })
         break

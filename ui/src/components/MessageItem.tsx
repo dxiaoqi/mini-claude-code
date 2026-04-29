@@ -11,6 +11,12 @@ import { exportMessageAsImage } from '@/lib/export-image'
 import type { ContentBlock, WorkflowBubble as WorkflowBubbleT } from '@/lib/types'
 import { parseVisualBlocksFromText } from '@/lib/parse-visual-in-text'
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
 export type { ToolCallItem }
 
 export interface ChatMessage {
@@ -36,6 +42,10 @@ export interface ChatMessage {
   workflowRunId?: string
   /** 从 session 恢复时与相邻 assistant 不合并为一条 */
   workflowNoMerge?: boolean
+  /** 上下文压缩分割线，渲染为横线而非气泡 */
+  isCompactDivider?: boolean
+  /** 压缩统计，配合 isCompactDivider 使用 */
+  compactStats?: { tokensBefore: number; tokensAfter: number; tokensFreed: number }
 }
 
 export interface InProgressArtifact {
@@ -240,6 +250,34 @@ export function MessageItem({ message, inProgress, isCurrentlyLoading, appMode, 
   const [hovered, setHovered] = useState(false)
   const [copyState, setCopyState] = useState<ActionState>('idle')
   const [imgState, setImgState] = useState<ActionState>('idle')
+
+  // ── Compact divider — rendered as a horizontal rule, not a bubble ──
+  if (message.isCompactDivider) {
+    const s = message.compactStats
+    const label = s
+      ? `上下文已压缩  ${formatTokens(s.tokensBefore)} → ${formatTokens(s.tokensAfter)} tokens（释放 ~${formatTokens(s.tokensFreed)}）`
+      : '上下文已压缩'
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '6px 0',
+        userSelect: 'none',
+      }}>
+        <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
+        <span style={{
+          fontSize: 11,
+          color: 'var(--text-tertiary)',
+          whiteSpace: 'nowrap',
+          letterSpacing: '0.02em',
+        }}>
+          {label}
+        </span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
+      </div>
+    )
+  }
 
   const isUser = message.role === 'user'
   const isGenerating = !!inProgress

@@ -100,9 +100,18 @@ export async function createBlinoServer(config: ServerConfig) {
   /** Replaced after PUT /api/config so new API keys apply without restart */
   let liveApiClient: APIClient = config.apiClient
 
-  function buildSessionTools(userToolsList: Tool[]): Tool[] {
+/** Tool names that write to the filesystem — blocked in artifacts mode */
+const WRITE_TOOL_NAMES = new Set([
+  'FileWrite', 'FileEdit', 'Bash', 'NotebookEdit',
+  'TodoWrite', 'SkillCreator',
+])
+
+  function buildSessionTools(userToolsList: Tool[], artifactsMode = false): Tool[] {
     const source = config.tools.filter(t => t.name !== 'ToolSearch' && t.name !== 'Agent')
-    const baseMerged = mergeTools(source, userToolsList)
+    let baseMerged = mergeTools(source, userToolsList)
+    if (artifactsMode) {
+      baseMerged = baseMerged.filter(t => !WRITE_TOOL_NAMES.has(t.name))
+    }
     const toolSearch = createToolSearchTool(baseMerged)
     const agent = config.tools.find(t => t.name === 'Agent')
     if (!agent) return [...baseMerged, toolSearch]
@@ -114,7 +123,8 @@ export async function createBlinoServer(config: ServerConfig) {
   userToolLoader.onChange(() => {
     const userTools = userToolLoader.getTools()
     for (const entry of sessions.values()) {
-      entry.tools = buildSessionTools(userTools)
+      const isArtifacts = !!entry.state.settings.systemPromptAddendum
+      entry.tools = buildSessionTools(userTools, isArtifacts)
     }
     console.log(
       `[UserToolLoader] 工具已热更新，当前用户工具：${userTools.map(t => t.name).join(', ') || '无'}`,
@@ -377,6 +387,7 @@ export async function createBlinoServer(config: ServerConfig) {
 
         const skillMd = read('SKILL.md')
         const visualProtocol = read('visual-protocol.md')
+        const rulesDoc = read('rules.md')
 
         if (!visualProtocol) {
           json(res, { content: null }, 404)
@@ -387,13 +398,17 @@ export async function createBlinoServer(config: ServerConfig) {
 ## ⚠️ ARTIFACTS MODE — VISUAL GENERATION OVERRIDE RULES (HIGHEST PRIORITY)
 
 1. **NEVER use Bash, ShellTool, or any tool to install graphviz, dot, plantuml, or any diagram software.**
-2. **NEVER use FileWrite or any file tool to produce diagram files (.dot, .svg, .png).**
-3. **When the user asks for a diagram, chart, or any visual: ALWAYS generate it inline using \`<visual type="svg">\` or \`<visual type="html">\` tags.**
-4. **Tool calls are allowed for READ-ONLY context gathering (FileRead, Glob, Grep) before drawing.**
-5. **Correct pattern:** (optional read-only tools) → output \`<visual type="svg">...</visual>\``
+2. **NEVER use FileWrite or any file tool to write content — not diagrams, not HTML, not any output. ALL content must be output inline using the visual protocol tags below.**
+3. **When the user asks for a diagram, chart, interactive UI, or any visual: ALWAYS generate it inline using \`<visual type="svg">\`, \`<visual type="html">\`, or the widget protocol.**
+4. **Tool calls are allowed ONLY for READ-ONLY context gathering (FileRead, Glob, Grep) before drawing.**
+5. **Correct pattern:** (optional read-only tools) → output inline visual tags. NEVER write to disk.
+6. **NEVER call \`Skill("streaming-artifacts")\` or any other Skill tool.** The behavior guidelines below are already injected into your context — they are NOT callable skills.`
 
-        const content = [overrideRules, '---', '## Visual Output Protocol', visualProtocol]
-          .join('\n\n')
+        const parts = [overrideRules, '---', '## Visual Output Protocol', visualProtocol]
+        if (rulesDoc) parts.push('---', '## Artifact Production Rules', rulesDoc)
+        if (skillMd) parts.push('---', skillMd)
+
+        const content = parts.join('\n\n')
 
         json(res, { content })
       } catch (err) {
@@ -456,6 +471,8 @@ export async function createBlinoServer(config: ServerConfig) {
         entry.state.settings.systemPromptAddendum = body.systemPromptAddendum
         // clear cache so the new addendum takes effect on next turn
         entry.state.systemPromptSectionCache.clear()
+        // Rebuild tools without write-capable tools (artifacts mode)
+        entry.tools = buildSessionTools(userToolLoader.getTools(), true)
       }
 
       json(res, { session: sessionToInfo(entry) })

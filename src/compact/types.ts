@@ -18,4 +18,10 @@ export interface CompactPipelineResult {
   messages: Message[]
   wasCompacted: boolean
   strategies: string[]
+  /** Estimated tokens before compaction (0 if not compacted) */
+  tokensBefore: number
+  /** Estimated tokens after compaction (0 if not compacted) */
+  tokensAfter: number
+  /** Estimated tokens freed (0 if not compacted) */
+  tokensFreed: number
 }

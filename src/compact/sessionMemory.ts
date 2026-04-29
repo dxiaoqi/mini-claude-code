@@ -17,7 +17,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Message, ContentBlock, ToolUseBlock } from '../types.js'
-import { handleSilentError } from '../errors/handlers.js'
 import { BLINO_USER_SUB, resolveUserBlinoPath } from '../constants/blinoPaths.js'
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────────
@@ -117,9 +116,16 @@ export function extractMetadataFromMessages(
 // ─── 持久化 ───────────────────────────────────────────────────────────────────────
 
 const MAX_SESSIONS_KEPT = 5
+const SAVE_RETRY_ATTEMPTS = 2
+const SAVE_RETRY_DELAY_MS = 200
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 /**
  * 压缩完成后，将摘要和元数据写入 session memory 文件。
+ * 失败时最多重试 SAVE_RETRY_ATTEMPTS 次，仍失败则抛出错误（由调用方决定如何处理）。
  */
 export async function saveSessionMemory(
   projectRoot: string,
@@ -129,43 +135,51 @@ export async function saveSessionMemory(
 ): Promise<void> {
   const filePath = getMemoryPath(projectRoot)
 
-  try {
-    await mkdir(resolve(filePath, '..'), { recursive: true })
-
-    let store: SessionMemoryStore
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= SAVE_RETRY_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(SAVE_RETRY_DELAY_MS)
     try {
-      const raw = await readFile(filePath, 'utf-8')
-      store = JSON.parse(raw) as SessionMemoryStore
-    } catch {
-      store = {
-        projectRoot,
-        lastUpdated: new Date().toISOString(),
-        sessions: [],
+      await mkdir(resolve(filePath, '..'), { recursive: true })
+
+      let store: SessionMemoryStore
+      try {
+        const raw = await readFile(filePath, 'utf-8')
+        store = JSON.parse(raw) as SessionMemoryStore
+      } catch {
+        store = {
+          projectRoot,
+          lastUpdated: new Date().toISOString(),
+          sessions: [],
+        }
       }
+
+      const entry: SessionMemoryEntry = {
+        sessionId,
+        timestamp: new Date().toISOString(),
+        summary: summaryText,
+        metadata,
+      }
+
+      // 去重：同一 sessionId 只保留最新
+      store.sessions = store.sessions.filter(s => s.sessionId !== sessionId)
+      store.sessions.push(entry)
+
+      // 只保留最近 MAX_SESSIONS_KEPT 条
+      if (store.sessions.length > MAX_SESSIONS_KEPT) {
+        store.sessions = store.sessions.slice(-MAX_SESSIONS_KEPT)
+      }
+
+      store.lastUpdated = new Date().toISOString()
+
+      await writeFile(filePath, JSON.stringify(store, null, 2), 'utf-8')
+      return // success
+    } catch (err) {
+      lastErr = err
     }
-
-    const entry: SessionMemoryEntry = {
-      sessionId,
-      timestamp: new Date().toISOString(),
-      summary: summaryText,
-      metadata,
-    }
-
-    // 去重：同一 sessionId 只保留最新
-    store.sessions = store.sessions.filter(s => s.sessionId !== sessionId)
-    store.sessions.push(entry)
-
-    // 只保留最近 MAX_SESSIONS_KEPT 条
-    if (store.sessions.length > MAX_SESSIONS_KEPT) {
-      store.sessions = store.sessions.slice(-MAX_SESSIONS_KEPT)
-    }
-
-    store.lastUpdated = new Date().toISOString()
-
-    await writeFile(filePath, JSON.stringify(store, null, 2), 'utf-8')
-  } catch (err) {
-    handleSilentError(err, { context: 'sessionMemory_save', sessionId })
   }
+
+  // All attempts failed — throw so the caller can log a warning
+  throw lastErr
 }
 
 /**

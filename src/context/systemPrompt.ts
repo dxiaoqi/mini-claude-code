@@ -121,7 +121,7 @@ function getToolUseSection(enabledToolNames: string[]): string {
 不要用 FileWrite 直接写 skill 文件，统一走 SkillCreator。`
       : null,
     enabledToolNames.includes('ToolSearch')
-      ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nIMPORTANT (B: Research before answering from memory): For any question about:\n  - Library/framework comparisons, best practices, or "what should I use for X"\n  - Version-specific features, recent changes, or release notes\n  - Third-party package recommendations or security advisories\n  …you MUST use ToolSearch to load WebSearch, then search the web. Do NOT answer from training knowledge alone — it may be outdated. Searching takes seconds and produces accurate, current results.`
+      ? `Some tools are deferred — use ToolSearch to discover them when needed: WebSearch (web search), WebFetch (URL fetch), PDFRead, ImageRead, NotebookEdit, MCP resources.\n\nFor questions about library/framework comparisons, version-specific features, recent changes, or third-party package recommendations, consider using ToolSearch to load WebSearch and get current information — especially when your training knowledge may be outdated or the user needs up-to-date results.`
       : null,
   ].filter(Boolean)
 

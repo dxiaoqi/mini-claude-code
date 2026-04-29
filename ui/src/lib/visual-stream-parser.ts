@@ -146,11 +146,17 @@ export class VisualStreamParser {
 
         if (vm === null && textEnd === -1) {
           // Neither found yet — flush safe portion.
-          // Reserve enough to detect a partial '<visual' tag at the buffer end.
-          // '<visual type="threejs">' is 24 chars; keep 40 to be safe.
-          // Also: never flush past a '<' that could start '<visual'.
+          // Reserve from the last '<' only if the text after it could still become
+          // '</text>' or '<visual'. If the prefix already diverges, flush past it.
           const ltIdx = this.buffer.lastIndexOf('<')
-          const reserveByTag = ltIdx !== -1 ? this.buffer.length - ltIdx : 0
+          let reserveByTag = 0
+          if (ltIdx !== -1) {
+            const afterLt = this.buffer.slice(ltIdx + 1)
+            const couldMatch = ['/text>', 'visual'].some(tag => tag.startsWith(afterLt) || afterLt.startsWith(tag.slice(0, afterLt.length)))
+            if (couldMatch) {
+              reserveByTag = this.buffer.length - ltIdx
+            }
+          }
           const reserve = Math.max(40, reserveByTag)
           const safe = this.buffer.slice(0, Math.max(0, this.buffer.length - reserve))
           if (safe) {
@@ -230,10 +236,18 @@ export class VisualStreamParser {
 
         if (valid.length === 0) {
           // No complete tag found — treat leading content as bare text (preamble).
-          // CRITICAL: reserve from the last '<' so we never flush a partial
-          // '<visual type="...">' opening tag across chunk boundaries.
+          // Reserve from the last '<' ONLY if the text after it could still become
+          // a known opening tag (<think>, <text>, <visual>). If the prefix after '<'
+          // already diverges from all known tags, it's safe to flush past it.
           const ltIdx = this.buffer.lastIndexOf('<')
-          const reserveByLt = ltIdx !== -1 ? this.buffer.length - ltIdx : 0
+          let reserveByLt = 0
+          if (ltIdx !== -1) {
+            const afterLt = this.buffer.slice(ltIdx + 1)
+            const couldMatch = ['think>', 'text>', 'visual'].some(tag => tag.startsWith(afterLt) || afterLt.startsWith(tag.slice(0, afterLt.length)))
+            if (couldMatch) {
+              reserveByLt = this.buffer.length - ltIdx
+            }
+          }
           const reserve = Math.max(12, reserveByLt)
           const safe = this.buffer.length > reserve ? this.buffer.slice(0, this.buffer.length - reserve) : ''
           if (safe) {

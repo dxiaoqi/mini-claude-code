@@ -44,8 +44,9 @@ import { claudeMdProvider } from './context/providers/claudemd.js'
 import { memoryProvider } from './context/providers/memory.js'
 import { gitContextProvider } from './context/providers/gitContext.js'
 import { sessionMemoryProvider } from './context/providers/sessionMemoryProvider.js'
+import { skillsProvider } from './context/providers/skillsProvider.js'
 import { withRetry, withFallback } from './api/retry.js'
-import { findAvailablePort, readServerLock, writeServerLock, registerLockCleanup } from './utils/portManager.js'
+import { findAvailablePort, readServerLock, writeServerLock, registerLockCleanup, detectEnvMismatch } from './utils/portManager.js'
 import { processAttachments, buildContentWithAttachments } from './utils/attachments.js'
 import { resolveApiConfig, loadSettings, persistPermissionRules, showConfig, saveApiConfig } from './utils/config.js'
 import { UserToolLoader } from './tools/user/UserToolLoader.js'
@@ -310,6 +311,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     memoryProvider,
     gitContextProvider,
     sessionMemoryProvider,
+    skillsProvider,
   ]
 
   // 组装完整工具列表
@@ -421,12 +423,33 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     const existingLock = await readServerLock(cwd)
     if (existingLock) {
       const url = `http://${existingLock.host}:${existingLock.port}`
+      const mismatches = detectEnvMismatch(existingLock)
+
+      if (mismatches.length > 0) {
+        console.log(chalk.yellow(
+          `⚡ blino server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
+        ))
+        console.log(chalk.red(
+          `⚠ Environment mismatch detected — the running instance was started with different settings:`
+        ))
+        for (const key of mismatches) {
+          const oldVal = existingLock.env?.[key] ?? '(unset)'
+          const newVal = process.env[key] ?? '(unset)'
+          console.log(chalk.dim(`   ${key}: ${oldVal} → ${newVal}`))
+        }
+        console.log(chalk.yellow(
+          `   Stop the existing instance first: kill ${existingLock.pid}`
+        ))
+        return
+      }
+
       console.log(chalk.yellow(
         `⚡ blino server already running for this workspace (port ${existingLock.port}, pid ${existingLock.pid})`
       ))
       if (isTui) {
-        console.log(chalk.cyan(`🌐 Opening browser: ${url}`))
-        await openBrowser(url)
+        const uiUrl = `http://${existingLock.host}:3000`
+        console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
+        await openBrowser(uiUrl)
       } else {
         console.log(chalk.dim(`API: ${url}/api`))
       }

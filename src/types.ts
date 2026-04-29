@@ -202,6 +202,7 @@ export type StreamEvent =
   | { type: 'agent_complete'; agentId: string; result: string; usage: Usage }
   | { type: 'turn_complete'; turnCount: number; usage: Usage }
   | { type: 'session_complete'; reason: string }
+  | { type: 'compact'; tokensFreed: number; strategies: string[]; tokensBefore: number; tokensAfter: number }
 
 // ────────────────────────────────────────────
 //  Unified UI Events (SSE wire format)
@@ -234,6 +235,7 @@ export type UIEvent =
   // ── Error / Status ──
   | { type: 'error.occurred'; message: string }
   | { type: 'status'; message: string }
+  | { type: 'compact'; tokensBefore: number; tokensAfter: number; tokensFreed: number; strategies: string[] }
   // ── Visual mode — Conversational ──
   | { type: 'conversational.reply'; text: string; done: boolean; full?: string }
   // ── Visual mode — Plan / Phase ──

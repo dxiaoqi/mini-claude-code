@@ -46,10 +46,16 @@ export function getEffectiveContextWindow(model: string): number {
 }
 
 export function getAutoCompactThreshold(model: string): number {
+  // Allow override via env var for testing (e.g. BLINO_COMPACT_THRESHOLD=2000)
+  const override = parseInt(process.env.BLINO_COMPACT_THRESHOLD ?? '', 10)
+  if (!isNaN(override) && override > 0) return override
   return getEffectiveContextWindow(model) - BUFFER_TOKENS
 }
 
 export function getWarningThreshold(model: string): number {
+  // Warning fires 20k tokens before the compact threshold
+  const override = parseInt(process.env.BLINO_COMPACT_THRESHOLD ?? '', 10)
+  if (!isNaN(override) && override > 0) return Math.max(0, override - WARNING_BUFFER_TOKENS)
   return getAutoCompactThreshold(model) - WARNING_BUFFER_TOKENS
 }
 
@@ -268,6 +274,7 @@ export async function summaryCompactIfNeeded(
   currentTokens: number,
   keepTurns = 4,
   customInstructions?: string,
+  summaryPrefix?: string,
 ): Promise<{ messages: Message[]; result: CompactionResult | null; warning: boolean }> {
   const threshold = getAutoCompactThreshold(model)
   const warningThreshold = getWarningThreshold(model)
@@ -307,7 +314,9 @@ export async function summaryCompactIfNeeded(
 
   const summaryMessage: Message = {
     role: 'user',
-    content: `[Context Summary — Previous Conversation]\n\n${summaryText}\n\n[End of Summary — Continuing from current state]`,
+    content: summaryPrefix
+      ? `${summaryPrefix}\n\n[Context Summary — Previous Conversation]\n\n${summaryText}\n\n[End of Summary — Continuing from current state]`
+      : `[Context Summary — Previous Conversation]\n\n${summaryText}\n\n[End of Summary — Continuing from current state]`,
   }
 
   const compactionResult: CompactionResult = {

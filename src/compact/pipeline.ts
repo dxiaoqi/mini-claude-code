@@ -60,16 +60,36 @@ export class CompactPipeline {
     const threshold = getAutoCompactThreshold(model)
     const warningThreshold = getWarningThreshold(model)
 
+    const isArtifactsMode = !!state?.settings?.systemPromptAddendum
+
+    const artifactsCustomInstructions = isArtifactsMode
+      ? 'IMPORTANT: This session runs in UI/Artifacts mode. The agent outputs content inline (SVG, HTML, markdown) — it does NOT write files to disk. Do NOT record any file paths under /tmp/ or elsewhere as "completed work". If the conversation mentions FileWrite calls or Skill tool calls that failed, treat them as errors to be noted under "Errors & Fixes", not as valid completed items or pending tasks to retry.'
+      : undefined
+
+    const artifactsSummaryPrefix = isArtifactsMode
+      ? `⚠️ ARTIFACTS MODE ACTIVE — Rules that apply for the rest of this session:
+- Output ALL content inline using <text> and <visual type="svg|html|threejs"> tags only
+- NEVER call Skill("streaming-artifacts") or any Skill tool — these are not available
+- NEVER use FileWrite, FileEdit, Bash, or any write tool
+- NEVER read project source files (*.ts, *.js, etc.) — this is a UI session, not a code session
+- Any failed Skill calls in the summary above are past errors — do NOT retry them`
+      : undefined
+
     const compactResult = await summaryCompactIfNeeded(
       currentMessages,
       apiClient,
       model,
       currentTokens,
+      4,
+      artifactsCustomInstructions,
+      artifactsSummaryPrefix,
     )
 
     if (compactResult.result) {
+      const tokensBefore = currentTokens
       currentMessages = compactResult.messages
       const freed = compactResult.result.tokensFreed
+      const tokensAfter = Math.max(0, tokensBefore - freed)
       strategies.push(`summary (freed ~${freed} tokens)`)
 
       // Session Memory：压缩后持久化摘要+元数据
@@ -82,13 +102,33 @@ export class CompactPipeline {
           state.totalOutputTokens,
         )
 
-        // 异步写入，不阻塞 agent 继续工作
+        // 异步写入，不阻塞 agent 继续工作；失败时记录 warn 而非静默丢弃
         saveSessionMemory(
           state.projectRoot,
           state.sessionId,
           compactResult.result.summaryText,
           metadata,
-        ).catch(() => {}) // 静默失败，不影响正常流程
+        ).catch((err: unknown) => {
+          const logger = state.settings?.logger as
+            | { warn?: (o: object, s: string) => void }
+            | undefined
+          const msg = err instanceof Error ? err.message : String(err)
+          if (logger?.warn) {
+            logger.warn({ sessionId: state.sessionId, err: msg }, '[sessionMemory] failed to save after retries')
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn(`[sessionMemory] failed to save after retries: ${msg}`)
+          }
+        })
+      }
+
+      return {
+        messages: currentMessages,
+        wasCompacted: true,
+        strategies,
+        tokensBefore,
+        tokensAfter,
+        tokensFreed: freed,
       }
     } else if (compactResult.warning) {
       strategies.push(`warning (${currentTokens}/${threshold} tokens)`)
@@ -96,8 +136,11 @@ export class CompactPipeline {
 
     return {
       messages: currentMessages,
-      wasCompacted: strategies.some(s => s.startsWith('summary')),
+      wasCompacted: false,
       strategies,
+      tokensBefore: 0,
+      tokensAfter: 0,
+      tokensFreed: 0,
     }
   }
 

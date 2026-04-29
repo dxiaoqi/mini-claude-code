@@ -32,6 +32,22 @@ export function stripSvgTextWrapperTags(s: string): string {
     .trim()
 }
 
+/**
+ * Streaming-safe variant: strips complete `<text>…</text>` pairs AND bare
+ * opening `<text>` tags that haven't been closed yet (mid-stream).
+ * SVG `<text x="…">` tags (with attributes) are left untouched.
+ */
+export function stripSvgTextWrapperTagsStreaming(s: string): string {
+  // First strip complete pairs
+  let out = s.replace(/<text([^>]*)>([\s\S]*?)<\/text>/gi, (full, attrs: string, inner: string) => {
+    if (/=/.test(String(attrs))) return full
+    return String(inner)
+  })
+  // Then strip any remaining bare opening tag (no attributes, not yet closed)
+  out = out.replace(/<text>/gi, '')
+  return out
+}
+
 function removeCompleteBlocks(s: string, thinkingParts: string[]): string {
   let out = s.replace(BLOCK_RE_REDACTED, (_, inner: string) => {
     const t = String(inner).trim()

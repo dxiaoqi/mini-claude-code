@@ -18,6 +18,8 @@ export interface ServerLockInfo {
   host: string
   cwd: string
   startedAt: string
+  /** Key env vars captured at startup, used to detect stale/mismatched instances */
+  env?: Record<string, string>
 }
 
 const LOCK_FILE_NAME = BLINO_CONFIG_FILE.serverLock
@@ -58,6 +60,37 @@ export async function findAvailablePort(
   )
 }
 
+/** Env vars that affect server behavior and should trigger a mismatch warning */
+const TRACKED_ENV_VARS = [
+  'BLINO_COMPACT_THRESHOLD',
+  'BLINO_UI_STANDALONE',
+  'PORT',
+  'HOST',
+]
+
+function captureTrackedEnv(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of TRACKED_ENV_VARS) {
+    if (process.env[key] !== undefined) out[key] = process.env[key]!
+  }
+  return out
+}
+
+/**
+ * Compare the lock's env snapshot against the current process env.
+ * Returns a list of keys that differ (added, removed, or changed).
+ */
+export function detectEnvMismatch(lock: ServerLockInfo): string[] {
+  const current = captureTrackedEnv()
+  const saved = lock.env ?? {}
+  const keys = new Set([...Object.keys(current), ...Object.keys(saved)])
+  const mismatches: string[] = []
+  for (const k of keys) {
+    if (current[k] !== saved[k]) mismatches.push(k)
+  }
+  return mismatches
+}
+
 // ── Workspace 锁文件 ─────────────────────────────────────────────────────────
 
 function getLockFilePath(cwd: string): string {
@@ -79,6 +112,7 @@ export async function writeServerLock(
     host,
     cwd,
     startedAt: new Date().toISOString(),
+    env: captureTrackedEnv(),
   }
   const path = getLockFilePath(cwd)
   await mkdir(resolveProjectBlinoPath(cwd), { recursive: true })

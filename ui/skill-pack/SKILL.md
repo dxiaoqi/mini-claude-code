@@ -1,4 +1,6 @@
-# Streaming Artifacts Skill
+# Streaming Artifacts — 行为指南
+
+> 这是直接注入到你的 system prompt 里的行为规范，不是一个可调用的 skill。不要尝试用 Skill 工具调用它。
 
 ## 你在做什么
 

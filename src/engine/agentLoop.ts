@@ -123,17 +123,6 @@ export async function* agentLoop(
     // ── Phase 0a: 工具结果大小限制（超限持久化到磁盘）──
     state.messages = await applyToolResultBudget(state.messages, state.sessionId)
 
-    // ── Phase 0b: 分层压缩管线（snip → micro → collapse → auto）──
-    const compactResult = await compactPipeline.run(
-      state.messages,
-      params.apiClient,
-      state.model,
-      state,  // 传入 state 以更新 autoCompactTracking / lastSummarizedMessageId
-    )
-    if (compactResult.wasCompacted) {
-      state.messages = compactResult.messages
-    }
-
     // ── Phase 1: 构建 System Prompt ──
     const systemPrompt = await buildSystemPrompt(state, params.tools, params.contextProviders)
 
@@ -347,6 +336,25 @@ export async function* agentLoop(
 
       turnCount++
       yield { type: 'turn_complete', turnCount, usage: currentUsage }
+
+      // ── Post-turn compaction（turn 结束后检查，不打断生成过程）──
+      const compactResultA = await compactPipeline.run(
+        state.messages,
+        params.apiClient,
+        state.model,
+        state,
+      )
+      if (compactResultA.wasCompacted) {
+        state.messages = compactResultA.messages
+        yield {
+          type: 'compact',
+          tokensFreed: compactResultA.tokensFreed,
+          strategies: compactResultA.strategies,
+          tokensBefore: compactResultA.tokensBefore,
+          tokensAfter: compactResultA.tokensAfter,
+        }
+      }
+
       continue
     }
 
@@ -393,6 +401,24 @@ export async function* agentLoop(
 
     if (stopReason === 'tool_use') {
       continue
+    }
+
+    // ── Post-turn compaction（turn 结束后检查，不打断生成过程）──
+    const compactResultB = await compactPipeline.run(
+      state.messages,
+      params.apiClient,
+      state.model,
+      state,
+    )
+    if (compactResultB.wasCompacted) {
+      state.messages = compactResultB.messages
+      yield {
+        type: 'compact',
+        tokensFreed: compactResultB.tokensFreed,
+        strategies: compactResultB.strategies,
+        tokensBefore: compactResultB.tokensBefore,
+        tokensAfter: compactResultB.tokensAfter,
+      }
     }
 
     // Stop Hook：Agent 完成时执行，可阻止退出

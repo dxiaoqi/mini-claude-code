@@ -77,7 +77,7 @@ export const SkillTool: Tool<Input, Output> = {
       return {
         data: {
           skillName: input.skill,
-          prompt: `Skill "${input.skill}" not found. Available skills: ${available}`,
+          prompt: `Skill "${input.skill}" not found. Available skills: ${available}. Do NOT retry this call — the skill does not exist and retrying will produce the same error. If you need this functionality, proceed without the skill or ask the user to create it.`,
           found: false,
         },
       }

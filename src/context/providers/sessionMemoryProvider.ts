@@ -33,6 +33,7 @@ export const sessionMemoryProvider: ContextProvider = {
         context,
         '',
         '_Note: This is context from a previous session. Verify current file states before making assumptions._',
+        '_IMPORTANT: Any tool calls, skill names, or file paths mentioned in "Errors & Fixes" above are records of PAST FAILURES — do NOT attempt to repeat them. Treat them as known-broken paths to avoid._',
         '---',
       ].join('\n')
     } catch {
