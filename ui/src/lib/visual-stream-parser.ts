@@ -67,11 +67,18 @@ export class VisualStreamParser {
         this.emit('text_chunk', { text: this.buffer })
         this.emit('text_end', {})
       } else if (this.state === 'in_visual') {
-        // Incomplete visual — still emit what we have
+        // Incomplete visual (no closing </visual> tag).
+        // Try to extract only the renderable portion by finding the natural
+        // end of the content type, then treat it as complete.
+        const raw = this.buffer.trim()
+        const content = trimToRenderableBoundary(raw, this.currentVisualType)
+        const looksRenderable = content.length > 20 && (
+          content.includes('<') || content.includes('{')
+        )
         this.emit('visual_end', {
           visualType: this.currentVisualType,
-          content: this.buffer,
-          isComplete: false,
+          content,
+          isComplete: looksRenderable,
         })
       } else if (this.state === 'idle' && this.buffer.trim()) {
         // Bare text at end
@@ -368,4 +375,37 @@ export class VisualStreamParser {
     this.currentVisualType = ''
     this.textBlockOpen = false
   }
+}
+
+/**
+ * When a visual block is missing its closing </visual> tag, the buffer may
+ * contain trailing prose that leaked in after the actual SVG/HTML content.
+ * This function trims the buffer to the natural end of the renderable content:
+ *   - svg  → keep up to and including </svg>
+ *   - html → keep up to and including </html> or </body>
+ *   - threejs → keep up to and including the last closing brace of the script
+ * Falls back to the full raw string if no boundary is found.
+ */
+function trimToRenderableBoundary(raw: string, visualType: string): string {
+  const type = visualType.toLowerCase()
+
+  if (type === 'svg') {
+    const end = raw.lastIndexOf('</svg>')
+    if (end !== -1) return raw.slice(0, end + 6)
+  }
+
+  if (type === 'html') {
+    const htmlEnd = raw.lastIndexOf('</html>')
+    if (htmlEnd !== -1) return raw.slice(0, htmlEnd + 7)
+    const bodyEnd = raw.lastIndexOf('</body>')
+    if (bodyEnd !== -1) return raw.slice(0, bodyEnd + 7)
+  }
+
+  if (type === 'threejs') {
+    // Three.js blocks are JS — find the last closing brace at top level
+    const end = raw.lastIndexOf('}')
+    if (end !== -1) return raw.slice(0, end + 1)
+  }
+
+  return raw
 }
