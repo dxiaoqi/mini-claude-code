@@ -40,6 +40,8 @@ import { StreamingToolExecutor } from './StreamingToolExecutor.js'
 import { runStopHooks } from '../utils/hooks.js'
 import type { HooksSettings } from '../utils/hooks.js'
 import { eventBus } from '../events/EventBus.js'
+import { extractMemoriesFromTurn } from '../memory/extractor.js'
+import { upsertSessionMemories } from '../compact/sessionMemory.js'
 
 export interface AgentLoopParams {
   /** 会话状态（直接引用，内部会修改其属性） */
@@ -355,6 +357,9 @@ export async function* agentLoop(
         }
       }
 
+      // ── Post-turn memory extraction（fire-and-forget）──
+      fireMemoryExtraction(state, turnCount)
+
       continue
     }
 
@@ -421,6 +426,9 @@ export async function* agentLoop(
       }
     }
 
+    // ── Post-turn memory extraction（fire-and-forget）──
+    fireMemoryExtraction(state, turnCount)
+
     // Stop Hook：Agent 完成时执行，可阻止退出
     const hooksSettings = state.settings?.hooks as HooksSettings | undefined
     if (hooksSettings?.Stop?.length) {
@@ -477,4 +485,51 @@ function extractStatusCode(err: Error): number | null {
   if (typeof anyErr.statusCode === 'number') return anyErr.statusCode
   const match = err.message.match(/\b(4\d{2}|5\d{2})\b/)
   return match ? parseInt(match[1], 10) : null
+}
+
+function getLastUserText(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role !== 'user') continue
+    if (typeof msg.content === 'string') return msg.content || null
+    const text = (msg.content as ContentBlock[])
+      .filter(b => b.type === 'text')
+      .map(b => (b as { type: 'text'; text: string }).text)
+      .join('')
+    return text || null
+  }
+  return null
+}
+
+function getLastAssistantText(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role !== 'assistant') continue
+    if (typeof msg.content === 'string') return msg.content || null
+    const text = (msg.content as ContentBlock[])
+      .filter(b => b.type === 'text')
+      .map(b => (b as { type: 'text'; text: string }).text)
+      .join('')
+    return text || null
+  }
+  return null
+}
+
+function fireMemoryExtraction(state: SessionState, turnCount: number): void {
+  const apiKey = process.env.ANTHROPIC_API_KEY || ''
+  if (!apiKey) return
+
+  const userText = getLastUserText(state.messages)
+  const assistantText = getLastAssistantText(state.messages)
+  if (!userText || !assistantText) return
+
+  const baseURL = (state.settings as Record<string, unknown>)?.anthropicBaseUrl as string | undefined
+  const model = state.settings?.memoryModel ?? state.model
+
+  extractMemoriesFromTurn(userText, assistantText, turnCount, apiKey, baseURL, model)
+    .then(entries => {
+      if (entries.length === 0) return
+      return upsertSessionMemories(state.projectRoot, state.sessionId, entries, turnCount)
+    })
+    .catch(() => { /* 静默降级，不影响主流程 */ })
 }

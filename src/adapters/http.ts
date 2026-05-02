@@ -39,6 +39,8 @@ export class HttpServerAdapter implements UIAdapter {
   private permissionCounter = 0
   /** Per-session think block tracking for think.start / think.end injection */
   private thinkingActive = new Map<string, boolean>()
+  /** Per-session visual block counter for unique IDs */
+  private visualCounter = new Map<string, number>()
 
   // SSE 连接注册（由 HTTP handler 调用）
   registerConnection(sessionId: string, res: ServerResponse, abortController: AbortController): void {
@@ -46,6 +48,7 @@ export class HttpServerAdapter implements UIAdapter {
     res.on('close', () => {
       this.connections.delete(sessionId)
       this.thinkingActive.delete(sessionId)
+      this.visualCounter.delete(sessionId)
     })
   }
 
@@ -110,7 +113,12 @@ export class HttpServerAdapter implements UIAdapter {
         results.push({ type: 'tool.delta', id: event.id, partialInput: event.partialInput })
         break
 
-      case 'tool_result':
+      case 'tool_result': {
+        // artifacts 모드에서 Agent tool 결과에 <visual> 블록이 있으면 별도 UIEvent로 emit
+        if (event.toolName === 'Agent' && typeof event.result === 'string') {
+          const visualEvents = extractVisualBlocks(event.result, sessionId, this.visualCounter)
+          results.push(...visualEvents)
+        }
         results.push({
           type: 'tool.result',
           toolName: event.toolName,
@@ -119,6 +127,7 @@ export class HttpServerAdapter implements UIAdapter {
           isError: event.isError,
         })
         break
+      }
 
       case 'message_start':
         results.push({ type: 'message.start', messageId: event.messageId, model: event.model })
@@ -230,5 +239,34 @@ export class HttpServerAdapter implements UIAdapter {
     }
     this.connections.delete(sessionId)
     this.thinkingActive.delete(sessionId)
+    this.visualCounter.delete(sessionId)
   }
+}
+
+/**
+ * 从 Agent tool result 字符串中提取 <visual type="...">...</visual> 块，
+ * 转换为 block.visual_start + block.visual UIEvent 对。
+ * 仅在 artifacts 모드（result 包含 <visual> 태그）에서 동작합니다.
+ */
+function extractVisualBlocks(
+  result: string,
+  sessionId: string,
+  counterMap: Map<string, number>,
+): UIEvent[] {
+  const events: UIEvent[] = []
+  const visualRegex = /<visual\s+type=["']([^"']+)["'][^>]*>([\s\S]*?)<\/visual>/gi
+  let match: RegExpExecArray | null
+
+  while ((match = visualRegex.exec(result)) !== null) {
+    const visualType = match[1]
+    const content = match[2]
+    const count = (counterMap.get(sessionId) ?? 0) + 1
+    counterMap.set(sessionId, count)
+    const blockId = `agent_v${sessionId.slice(-6)}_${count}`
+
+    events.push({ type: 'block.visual_start', blockId, visualType })
+    events.push({ type: 'block.visual', blockId, visualType, content })
+  }
+
+  return events
 }

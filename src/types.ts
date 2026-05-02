@@ -303,6 +303,11 @@ export interface Settings {
   /** Logger instance for structured logging */
   logger?: unknown
   /**
+   * 记忆提取使用的模型，默认跟随主模型（settings.model）。
+   * 可设为轻量模型（如 claude-haiku-4-5-20251001）降低成本。
+   */
+  memoryModel?: string
+  /**
    * 由 UI 注入的额外 system prompt 内容（追加在静态区末尾）。
    * 用于 Artifacts 模式向 agent 注入 visual-protocol 等引导词。
    */
