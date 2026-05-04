@@ -449,15 +449,13 @@ const WRITE_TOOL_NAMES = new Set([
 
       let entry: SessionEntry
 
-      // 恢复历史 session
+      // 恢复历史 session：始终从 transcript 加载完整消息（忽略内存中已压缩的版本）
       if (body.resumeSessionId) {
         entry = getOrCreateSession(body.resumeSessionId)
-        if (entry.state.messages.length === 0) {
-          const messages = await loadTranscript(config.cwd, body.resumeSessionId).catch(() => [])
-          if (messages.length > 0) {
-            entry.state.messages = messages
-            entry.state.sessionId = body.resumeSessionId
-          }
+        const messages = await loadTranscript(config.cwd, body.resumeSessionId).catch(() => [])
+        if (messages.length > 0) {
+          entry.state.messages = messages
+          entry.state.sessionId = body.resumeSessionId
         }
       } else {
         entry = getOrCreateSession(body.sessionId)
@@ -492,7 +490,10 @@ const WRITE_TOOL_NAMES = new Set([
     if (method === 'GET' && sessionMatch) {
       const entry = sessions.get(sessionMatch[1])
       if (!entry) return json(res, { error: 'Session not found' }, 404)
-      json(res, { session: sessionToInfo(entry), messages: entry.state.messages })
+      // 优先从 transcript 读取完整消息历史（包含 compact 前的原始消息）
+      const transcriptMessages = await loadTranscript(config.cwd, sessionMatch[1]).catch(() => [])
+      const messages = transcriptMessages.length > 0 ? transcriptMessages : entry.state.messages
+      json(res, { session: sessionToInfo(entry), messages })
       return
     }
 

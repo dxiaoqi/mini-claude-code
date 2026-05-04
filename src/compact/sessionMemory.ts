@@ -309,7 +309,9 @@ export function formatSessionMemoryContext(entry: SessionMemoryEntry): string {
   const parts: string[] = [
     `# Previous Session Memory (${date})`,
     '',
+    '<summary_text>',
     summary,
+    '</summary_text>',
   ]
 
   if (metadata.filesModified.length > 0) {
