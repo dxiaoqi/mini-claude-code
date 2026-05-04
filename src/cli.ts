@@ -95,6 +95,8 @@ program
   .option('--port <port>', 'HTTP server port (default: 3001)')
   .option('--host <host>', 'HTTP server host (default: localhost)')
   .option('--cors-origin <origin>', 'CORS allowed origin for web UI')
+  .option('--cc-serve', 'Start Claude Code adapter server (bridges claude CLI to web UI)')
+  .option('--cc-port <port>', 'Claude Code adapter server port (default: 3002)')
   .option('--config', 'Show current effective configuration')
   .option(
     '--dev',
@@ -185,6 +187,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
   const isTui = (options.tui as boolean)
   const isServe = (options.serve as boolean) || isTui
+  const isCcServe = (options.ccServe as boolean)
   const isPipe = options.pipe as boolean
   const bypassPermissions = options.bypassPermissions as boolean
   const useCoordinator = (options.coordinator as boolean) || isCoordinatorMode()
@@ -391,6 +394,91 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
     }
 
     process.exit(0)
+  }
+
+  // ── Claude Code Adapter Server 模式 ──
+  if (isCcServe) {
+    const { createClaudeCodeServer } = await import('./adapters/claude-code/index.js')
+    const host = (options.host as string) || process.env.HOST || 'localhost'
+    const requestedCcPort = parseInt((options.ccPort as string) || process.env.CC_PORT || '3002', 10)
+    const requestedUiPort = parseInt((options.uiPort as string) || process.env.UI_PORT || '3000', 10)
+
+    const ccPort = await findAvailablePort(requestedCcPort, host)
+    if (ccPort !== requestedCcPort) {
+      console.log(chalk.dim(`   ⚠ Port ${requestedCcPort} in use — adapter using port ${ccPort}`))
+    }
+    const uiPort = await findAvailablePort(requestedUiPort, host)
+    if (uiPort !== requestedUiPort) {
+      console.log(chalk.dim(`   ⚠ Port ${requestedUiPort} in use — UI using port ${uiPort}`))
+    }
+
+    const ccServer = await createClaudeCodeServer({ port: ccPort, host, cwd })
+    await ccServer.start()
+
+    process.on('SIGINT', async () => {
+      await ccServer.stop()
+      process.exit(0)
+    })
+
+    // ── 一键启动 UI ──
+    {
+      const { spawn } = await import('node:child_process')
+      const { resolve: resolvePath2, join: joinPath } = await import('node:path')
+      const { fileURLToPath: fu2 } = await import('node:url')
+      const { existsSync: es2 } = await import('node:fs')
+      const __dir2 = resolvePath2(fu2(import.meta.url), '..')
+      const pkgRoot = resolvePath2(__dir2, '..')
+
+      const standaloneServer = joinPath(pkgRoot, 'ui-standalone', 'server.js')
+      const uiDir = joinPath(pkgRoot, 'ui')
+      const hasUiSource = es2(joinPath(uiDir, 'src', 'app', 'page.tsx'))
+      const forceStandalone = process.env.BLINO_UI_STANDALONE === '1'
+      const useStandaloneUi = es2(standaloneServer) && (forceStandalone || !hasUiSource)
+
+      let uiProc: ReturnType<typeof spawn>
+
+      if (useStandaloneUi) {
+        console.log(chalk.cyan(`\n🖥  Starting UI server (standalone, port ${uiPort})…`))
+        uiProc = spawn(process.execPath, [standaloneServer], {
+          cwd: pkgRoot,
+          stdio: 'inherit',
+          env: {
+            ...process.env,
+            PORT: String(uiPort),
+            HOSTNAME: host,
+            NEXT_PUBLIC_BLINO_URL: `http://${host}:${ccPort}`,
+          },
+        })
+      } else {
+        console.log(chalk.cyan(`\n🖥  Starting UI dev server (port ${uiPort})…`))
+        uiProc = spawn('npm', ['run', 'dev', '--', '--port', String(uiPort)], {
+          cwd: uiDir,
+          stdio: 'inherit',
+          shell: true,
+          env: {
+            ...process.env,
+            NEXT_PUBLIC_BLINO_URL: `http://${host}:${ccPort}`,
+          },
+        })
+      }
+
+      uiProc.on('error', (err) => {
+        console.error(chalk.yellow(`⚠ UI process error: ${err.message}`))
+      })
+
+      process.on('exit', () => { try { uiProc.kill() } catch { /* ignore */ } })
+
+      const uiUrl = `http://${host}:${uiPort}`
+      const warmUpMs = useStandaloneUi ? 2000 : 4000
+      setTimeout(async () => {
+        console.log(chalk.cyan(`🌐 Opening browser: ${uiUrl}`))
+        await openBrowser(uiUrl)
+      }, warmUpMs)
+    }
+
+    // 保持进程运行
+    await new Promise<void>(() => { /* runs until SIGINT */ })
+    return
   }
 
   // ── HTTP Server 模式 ──
