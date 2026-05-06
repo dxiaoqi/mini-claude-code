@@ -38,6 +38,7 @@ export const BLINO_CONFIG_FILE = {
   settings: 'settings.json',
   settingsLocal: 'settings.local.json',
   serverLock: 'server.json',
+  projectConfig: 'config.json',
 } as const
 
 /** 与历史逻辑一致：HOME / USERPROFILE / os.homedir() / /tmp */

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas Renderer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --bg2: #1a1a1f;
+    --bg3: #242429;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8e6df;
+    --text2: #8a8880;
+    --text3: #555450;
+    --accent: #7c6af7;
+    --accent-dim: rgba(124,106,247,0.15);
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.12);
+    --red: #f87171;
+    --amber: #fbbf24;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 13px; overflow: hidden; }
+
+  /* ── Layout ── */
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  #toolbar {
+    flex-shrink: 0;
+    height: 44px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+  }
+
+  #canvas-area {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(124,106,247,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(74,222,128,0.03) 0%, transparent 50%),
+      var(--bg);
+    background-size: 20px 20px;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(124,106,247,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(74,222,128,0.03) 0%, transparent 50%),
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: auto, auto, 24px 24px, 24px 24px;
+  }
+
+  #canvas-viewport {
+    position: absolute;
+    inset: 0;
+    transform-origin: 0 0;
+  }
+
+  /* ── Cards ── */
+  .card {
+    position: absolute;
+    min-width: 220px;
+    max-width: 360px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover { border-color: rgba(255,255,255,0.14); box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  .card.dragging { cursor: grabbing; box-shadow: 0 16px 48px rgba(0,0,0,0.6); z-index: 1000; }
+  .card.streaming { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim), 0 8px 32px rgba(0,0,0,0.5); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+  .card-title { font-size: 12px; font-weight: 500; color: var(--text); flex: 1; }
+  .card-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .badge-streaming { background: var(--accent-dim); color: var(--accent); }
+  .badge-done { background: var(--green-dim); color: var(--green); }
+  .badge-tool { background: rgba(251,191,36,0.12); color: var(--amber); }
+
+  .card-body { padding: 10px 12px 12px; }
+
+  .card-text {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── Tool calls inside card ── */
+  .tool-call {
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: var(--bg3);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid var(--amber);
+    font-size: 11px;
+  }
+  .tool-name { color: var(--amber); font-weight: 500; margin-bottom: 3px; }
+  .tool-result { color: var(--text2); margin-top: 4px; font-family: monospace; font-size: 10.5px; max-height: 80px; overflow: hidden; }
+  .tool-result.done { color: var(--green); }
+
+  /* ── Cursor blink ── */
+  .cursor { display: inline-block; width: 2px; height: 13px; background: var(--accent); margin-left: 1px; vertical-align: text-bottom; animation: blink 1s step-end infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── Toolbar buttons ── */
+  .tb-btn {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text2);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.1s, color 0.1s;
+  }
+  .tb-btn:hover { background: var(--bg3); color: var(--text); }
+  .tb-btn.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(124,106,247,0.3); }
+
+  .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+  .tb-label { font-size: 11px; color: var(--text3); margin-left: 4px; }
+
+  /* ── Status dot ── */
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); }
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.streaming { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Zoom indicator ── */
+  #zoom-indicator {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    font-size: 11px;
+    color: var(--text3);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    pointer-events: none;
+  }
+
+  /* ── Empty state ── */
+  #empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    opacity: 0.35;
+  }
+  #empty-state svg { opacity: 0.5; }
+  #empty-state p { font-size: 13px; color: var(--text2); }
+  #empty-state small { font-size: 11px; color: var(--text3); }
+
+  /* ── Markdown-ish rendering ── */
+  .card-text code { background: var(--bg3); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px; color: var(--accent); }
+  .card-text strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="tb-label" id="status-label">等待连接…</span>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-fit" title="适应画布">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      适应
+    </button>
+    <button class="tb-btn" id="btn-clear">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      清空
+    </button>
+    <div class="tb-sep"></div>
+    <span class="tb-label" id="card-count">0 张卡片</span>
+  </div>
+
+  <div id="canvas-area">
+    <div id="canvas-viewport">
+      <!-- cards injected here -->
+    </div>
+    <div id="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <p>画布为空</p>
+      <small>发送消息后，回复将以卡片形式出现在这里</small>
+    </div>
+    <div id="zoom-indicator">100%</div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  connected: false,
+  streaming: false,
+  sessionId: null,
+  cards: [],          // { id, x, y, text, tools, status }
+  activeCardId: null,
+  pan: { x: 40, y: 40 },
+  zoom: 1,
+  drag: null,         // { cardId, startX, startY, origX, origY }
+  panDrag: null,      // { startX, startY, origPanX, origPanY }
+  nextX: 40,
+  nextY: 40,
+}
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const viewport   = document.getElementById('canvas-viewport')
+const emptyState = document.getElementById('empty-state')
+const statusDot  = document.getElementById('status-dot')
+const statusLabel= document.getElementById('status-label')
+const cardCount  = document.getElementById('card-count')
+const zoomInd    = document.getElementById('zoom-indicator')
+
+// ── Viewport transform ─────────────────────────────────────────────────────
+function applyTransform() {
+  viewport.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`
+  zoomInd.textContent = Math.round(state.zoom * 100) + '%'
+}
+
+// ── Card management ────────────────────────────────────────────────────────
+function nextCardPos() {
+  const cols = 3
+  const col = state.cards.length % cols
+  const row = Math.floor(state.cards.length / cols)
+  return { x: 40 + col * 280, y: 40 + row * 200 }
+}
+
+function createCard() {
+  const pos = nextCardPos()
+  const card = { id: 'card-' + Date.now(), x: pos.x, y: pos.y, text: '', tools: [], status: 'streaming' }
+  state.cards.push(card)
+  state.activeCardId = card.id
+  renderCard(card)
+  updateEmptyState()
+  updateCardCount()
+  return card
+}
+
+function renderCard(card) {
+  let el = document.getElementById(card.id)
+  const isNew = !el
+  if (isNew) {
+    el = document.createElement('div')
+    el.id = card.id
+    el.className = 'card'
+    viewport.appendChild(el)
+    attachDrag(el, card)
+  }
+
+  el.className = 'card' + (card.status === 'streaming' ? ' streaming' : '')
+  el.style.left = card.x + 'px'
+  el.style.top  = card.y + 'px'
+
+  const badgeClass = card.status === 'streaming' ? 'badge-streaming' : 'badge-done'
+  const badgeText  = card.status === 'streaming' ? '生成中' : '完成'
+
+  const toolsHtml = card.tools.map(t => `
+    <div class="tool-call">
+      <div class="tool-name">⚙ ${escHtml(t.name)}</div>
+      ${t.result !== undefined
+        ? `<div class="tool-result done">✓ ${escHtml(String(t.result)).slice(0, 120)}</div>`
+        : `<div class="tool-result">运行中…</div>`}
+    </div>`).join('')
+
+  const cursor = card.status === 'streaming' ? '<span class="cursor"></span>' : ''
+  const bodyText = renderMarkdown(card.text)
+
+  el.innerHTML = `
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(124,106,247,0.15)">✦</div>
+      <span class="card-title">AI 回复</span>
+      <span class="card-badge ${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="card-body">
+      <div class="card-text">${bodyText}${cursor}</div>
+      ${toolsHtml}
+    </div>`
+}
+
+function updateCard(id, patch) {
+  const card = state.cards.find(c => c.id === id)
+  if (!card) return
+  Object.assign(card, patch)
+  renderCard(card)
+}
+
+function updateEmptyState() {
+  emptyState.style.display = state.cards.length === 0 ? 'flex' : 'none'
+}
+
+function updateCardCount() {
+  cardCount.textContent = state.cards.length + ' 张卡片'
+}
+
+// ── Markdown-ish ───────────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+function renderMarkdown(text) {
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
+// ── Drag cards ─────────────────────────────────────────────────────────────
+function attachDrag(el, card) {
+  el.addEventListener('mousedown', e => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    state.drag = { cardId: card.id, startX: e.clientX, startY: e.clientY, origX: card.x, origY: card.y }
+    el.classList.add('dragging')
+  })
+}
+
+document.addEventListener('mousemove', e => {
+  if (state.drag) {
+    const dx = (e.clientX - state.drag.startX) / state.zoom
+    const dy = (e.clientY - state.drag.startY) / state.zoom
+    updateCard(state.drag.cardId, { x: state.drag.origX + dx, y: state.drag.origY + dy })
+    const el = document.getElementById(state.drag.cardId)
+    if (el) { el.style.left = (state.drag.origX + dx) + 'px'; el.style.top = (state.drag.origY + dy) + 'px' }
+    return
+  }
+  if (state.panDrag) {
+    state.pan.x = state.panDrag.origPanX + (e.clientX - state.panDrag.startX)
+    state.pan.y = state.panDrag.origPanY + (e.clientY - state.panDrag.startY)
+    applyTransform()
+  }
+})
+
+document.addEventListener('mouseup', e => {
+  if (state.drag) {
+    const el = document.getElementById(state.drag.cardId)
+    if (el) el.classList.remove('dragging')
+    state.drag = null
+  }
+  state.panDrag = null
+})
+
+// ── Pan canvas ─────────────────────────────────────────────────────────────
+document.getElementById('canvas-area').addEventListener('mousedown', e => {
+  if (e.button === 1 || (e.button === 0 && !e.target.closest('.card'))) {
+    e.preventDefault()
+    state.panDrag = { startX: e.clientX, startY: e.clientY, origPanX: state.pan.x, origPanY: state.pan.y }
+  }
+})
+
+// ── Zoom ───────────────────────────────────────────────────────────────────
+document.getElementById('canvas-area').addEventListener('wheel', e => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? 0.9 : 1.1
+  state.zoom = Math.min(2, Math.max(0.2, state.zoom * delta))
+  applyTransform()
+}, { passive: false })
+
+// ── Toolbar ────────────────────────────────────────────────────────────────
+document.getElementById('btn-fit').addEventListener('click', () => {
+  state.pan = { x: 40, y: 40 }
+  state.zoom = 1
+  applyTransform()
+})
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  state.cards = []
+  state.activeCardId = null
+  viewport.innerHTML = ''
+  updateEmptyState()
+  updateCardCount()
+})
+
+// ── Status ─────────────────────────────────────────────────────────────────
+function setStatus(s) {
+  statusDot.className = 'status-dot ' + s
+  statusLabel.textContent = s === 'connected' ? '已连接' : s === 'streaming' ? '生成中…' : '等待连接…'
+}
+
+// ── postMessage protocol ───────────────────────────────────────────────────
+
+// Signal ready after DOM is loaded to ensure host iframe ref is attached
+function signalReady() {
+  parent.postMessage({ type: 'RENDERER_READY' }, '*')
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', signalReady)
+} else {
+  // Already loaded (inline script at end of body)
+  setTimeout(signalReady, 0)
+}
+
+window.addEventListener('message', e => {
+  const { type, payload } = e.data ?? {}
+
+  if (type === 'SESSION_INIT') {
+    state.connected = true
+    setStatus('connected')
+
+    // Tell LLM our preferred output format
+    parent.postMessage({
+      type: 'UPDATE_SYSTEM_PROMPT',
+      payload: {
+        addendum: `你正在一个画布式界面里运行。每次回复请直接输出内容，不需要解释你在做什么。
+回复可以包含 Markdown（**粗体**、\`代码\`）。
+如果用户要求生成图表或可视化，使用 <visual type="svg"> 或 <visual type="html"> 标签输出。`
+      }
+    }, '*')
+    return
+  }
+
+  if (type === 'CONTEXT_UPDATE') {
+    if (payload?.sessionId) state.sessionId = payload.sessionId
+    return
+  }
+
+  if (type === 'THEME_UPDATE') {
+    return
+  }
+
+  if (type !== 'STREAM_EVENT') return
+  const ev = payload
+
+  switch (ev.type) {
+    case 'message.start': {
+      state.streaming = true
+      setStatus('streaming')
+      createCard()
+      break
+    }
+
+    case 'text.delta': {
+      const card = state.cards.find(c => c.id === state.activeCardId)
+      if (card) updateCard(card.id, { text: card.text + ev.text })
+      break
+    }
+
+    case 'tool.start': {
+      const card = state.cards.find(c => c.id === state.activeCardId)
+      if (card) {
+        card.tools.push({ id: ev.id, name: ev.name, result: undefined })
+        renderCard(card)
+      }
+      break
+    }
+
+    case 'tool.result': {
+      const card = state.cards.find(c => c.id === state.activeCardId)
+      if (card) {
+        const tool = card.tools.find(t => t.id === ev.toolUseId)
+        if (tool) tool.result = ev.result
+        renderCard(card)
+      }
+      break
+    }
+
+    case 'done': {
+      state.streaming = false
+      setStatus('connected')
+      const card = state.cards.find(c => c.id === state.activeCardId)
+      if (card) updateCard(card.id, { status: 'done' })
+      state.activeCardId = null
+      break
+    }
+
+    case 'error.occurred': {
+      state.streaming = false
+      setStatus('connected')
+      const card = state.cards.find(c => c.id === state.activeCardId)
+      if (card) updateCard(card.id, { status: 'done', text: card.text + '\n\n⚠ ' + ev.message })
+      break
+    }
+  }
+})
+
+// ── Init ───────────────────────────────────────────────────────────────────
+applyTransform()
+updateEmptyState()
+</script>
+</body>
+</html>

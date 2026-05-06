@@ -37,7 +37,7 @@ import { createToolSearchTool } from '../tools/ToolSearchTool.js'
 import { runAgentLoop } from '../engine/AgentEngine.js'
 import { apiCompact } from '../compact/apiCompact.js'
 import { listSessions, loadTranscript, recordTranscript } from '../state/transcript.js'
-import { loadSettings, getLocalConfigPath, resolveApiConfig } from '../utils/config.js'
+import { loadSettings, getLocalConfigPath, resolveApiConfig, loadProjectConfig } from '../utils/config.js'
 import { rebuildApiClientFromWorkspace } from './rebuildApiClient.js'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -254,7 +254,10 @@ const WRITE_TOOL_NAMES = new Set([
     // ── GET /api/config ──
     if (method === 'GET' && path === '/api/config') {
       try {
-        const settings = await loadSettings(config.cwd)
+        const [settings, projectConfig] = await Promise.all([
+          loadSettings(config.cwd),
+          loadProjectConfig(config.cwd),
+        ])
         const topModel = settings.api?.model || settings.model || config.defaultModel
         const includeSecrets =
           url.searchParams.get('secrets') === '1' &&
@@ -274,6 +277,7 @@ const WRITE_TOOL_NAMES = new Set([
             hasAnthropicKey: !!(settings.api?.anthropicApiKey),
             hasOpenaiKey: !!(settings.api?.openaiApiKey),
           },
+          renderer: projectConfig.renderer ?? null,
         }
 
         // Node/SSR only: effective keys for Artifacts orchestrator (OpenAI SDK on Next server).

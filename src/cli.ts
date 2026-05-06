@@ -468,6 +468,36 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
       process.on('exit', () => { try { uiProc.kill() } catch { /* ignore */ } })
 
+      // ── Auto-start custom renderer static server if configured ──────────
+      try {
+        const { loadProjectConfig } = await import('./utils/config.js')
+        const projectConfig = await loadProjectConfig(cwd)
+        const rendererUrl = projectConfig.renderer?.url
+        if (rendererUrl) {
+          const rendererUrlObj = new URL(rendererUrl)
+          const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(rendererUrlObj.hostname)
+          if (isLocalhost) {
+            const rendererPort = parseInt(rendererUrlObj.port || '80', 10)
+            const rendererDirCandidates = [
+              joinPath(cwd, 'test-renderer'),
+              joinPath(cwd, rendererUrlObj.pathname.replace(/^\//, '') || 'renderer'),
+            ]
+            const rendererDir = rendererDirCandidates.find(d => es2(joinPath(d, 'index.html')))
+            if (rendererDir) {
+              console.log(chalk.cyan(`\n🎨 Starting renderer server (port ${rendererPort})…`))
+              const rendererProc = spawn('npx', ['serve', '-p', String(rendererPort), '--no-clipboard', rendererDir], {
+                stdio: 'inherit',
+                shell: true,
+              })
+              rendererProc.on('error', (err) => {
+                console.error(chalk.yellow(`⚠ Renderer server error: ${err.message}`))
+              })
+              process.on('exit', () => { try { rendererProc.kill() } catch { /* ignore */ } })
+            }
+          }
+        }
+      } catch { /* renderer auto-start is best-effort */ }
+
       const uiUrl = `http://${host}:${uiPort}`
       const warmUpMs = useStandaloneUi ? 2000 : 4000
       setTimeout(async () => {
@@ -609,7 +639,7 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
 
       const standaloneServer = joinPath(pkgRoot, 'ui-standalone', 'server.js')
       const uiDir = joinPath(pkgRoot, 'ui')
-      /** Full clone / npm link: prefer live Next dev so UI matches ui/src (old ui-standalone won’t hide new features). */
+      /** Full clone / npm link: prefer live Next dev so UI matches ui/src (old ui-standalone won't hide new features). */
       const hasUiSource = es2(joinPath(uiDir, 'src', 'app', 'page.tsx'))
       const forceStandalone = process.env.BLINO_UI_STANDALONE === '1'
       const useStandaloneUi = es2(standaloneServer) && (forceStandalone || !hasUiSource)
@@ -648,6 +678,37 @@ program.action(async (prompt: string | undefined, options: Record<string, unknow
       })
 
       process.on('exit', () => { try { uiProc.kill() } catch { /* ignore */ } })
+
+      // ── Auto-start custom renderer static server if configured ──────────
+      try {
+        const { loadProjectConfig } = await import('./utils/config.js')
+        const projectConfig = await loadProjectConfig(cwd)
+        const rendererUrl = projectConfig.renderer?.url
+        if (rendererUrl) {
+          const rendererUrlObj = new URL(rendererUrl)
+          const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(rendererUrlObj.hostname)
+          if (isLocalhost) {
+            const rendererPort = parseInt(rendererUrlObj.port || '80', 10)
+            // Check if a renderer directory exists at <cwd>/test-renderer or <cwd>/<renderer-name>
+            const rendererDirCandidates = [
+              joinPath(cwd, 'test-renderer'),
+              joinPath(cwd, rendererUrlObj.pathname.replace(/^\//, '') || 'renderer'),
+            ]
+            const rendererDir = rendererDirCandidates.find(d => es2(joinPath(d, 'index.html')))
+            if (rendererDir) {
+              console.log(chalk.cyan(`\n🎨 Starting renderer server (port ${rendererPort})…`))
+              const rendererProc = spawn('npx', ['serve', '-p', String(rendererPort), '--no-clipboard', rendererDir], {
+                stdio: 'inherit',
+                shell: true,
+              })
+              rendererProc.on('error', (err) => {
+                console.error(chalk.yellow(`⚠ Renderer server error: ${err.message}`))
+              })
+              process.on('exit', () => { try { rendererProc.kill() } catch { /* ignore */ } })
+            }
+          }
+        }
+      } catch { /* renderer auto-start is best-effort */ }
 
       // Wait for UI to be ready, then open browser
       const uiUrl = `http://${host}:${uiPort}`

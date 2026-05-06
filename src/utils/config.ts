@@ -238,6 +238,28 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
   return result
 }
 
+export interface RendererConfig {
+  url: string
+  name?: string
+  description?: string
+  inputMode?: 'host' | 'renderer'
+}
+
+export interface ProjectConfig {
+  renderer?: RendererConfig
+}
+
+/** 读取项目级 .blino/config.json，不存在时返回 {} */
+export async function loadProjectConfig(projectRoot: string): Promise<ProjectConfig> {
+  const path = resolveProjectBlinoPath(projectRoot, BLINO_CONFIG_FILE.projectConfig)
+  try {
+    const raw = await readFile(path, 'utf-8')
+    return JSON.parse(raw) as ProjectConfig
+  } catch {
+    return {}
+  }
+}
+
 /** 打印当前有效配置（用于 blino config show） */
 export async function showConfig(projectRoot: string): Promise<void> {
   const cfg = await resolveApiConfig(projectRoot)

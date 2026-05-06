@@ -26,6 +26,8 @@ import { ApiSettingsPanel } from '@/components/ApiSettingsPanel'
 import { splitRedactedThinking, stripThinkingFromContentBlocks, stripSvgTextWrapperTags, stripSvgTextWrapperTagsStreaming } from '@/lib/redacted-thinking'
 import { apiMessagesToChatMessages } from '@/lib/api-messages'
 import { appendSessionUiMessage, withBlinoWfPrefix } from '@/lib/session-ui-sync'
+import { CustomRendererFrame, type CustomRendererFrameHandle } from '@/components/CustomRendererFrame'
+import type { RendererConfig } from '@/lib/custom-renderer'
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -255,6 +257,12 @@ export default function HomePage() {
   const [slashMenuSuppressed, setSlashMenuSuppressed] = useState(false)
   const showSlashMenu = input.startsWith('/') && !slashMenuSuppressed
 
+  // ── Custom Renderer ────────────────────────────────────────────────────────
+  const [rendererConfig, setRendererConfig] = useState<RendererConfig | null>(null)
+  const rendererFrameRef = useRef<CustomRendererFrameHandle | null>(null)
+  // addendum injected by renderer via UPDATE_SYSTEM_PROMPT
+  const rendererAddendumRef = useRef<string | null>(null)
+
   const messagesRef = useRef<ChatMessage[]>([])
   useEffect(() => {
     messagesRef.current = messages
@@ -277,6 +285,17 @@ export default function HomePage() {
 
   useEffect(() => {
     return workflowManager.subscribe(setWorkflowTasks)
+  }, [])
+
+  // Fetch renderer config once on mount — use local Next.js API route so it
+  // works regardless of which backend NEXT_PUBLIC_BLINO_URL points to.
+  useEffect(() => {
+    fetch('/api/blino-config')
+      .then(r => r.json())
+      .then((data: { renderer?: RendererConfig | null }) => {
+        if (data.renderer?.url) setRendererConfig(data.renderer)
+      })
+      .catch(() => {})
   }, [])
 
   // Refs
@@ -1448,7 +1467,15 @@ export default function HomePage() {
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim()
-          if (data && data !== '[DONE]') processEvent(data)
+          if (data && data !== '[DONE]') {
+            processEvent(data)
+            // Forward to custom renderer if active
+            if (rendererFrameRef.current) {
+              try {
+                rendererFrameRef.current.sendStreamEvent(JSON.parse(data))
+              } catch { /* ignore parse errors */ }
+            }
+          }
         }
       }
     }
@@ -1502,9 +1529,15 @@ export default function HomePage() {
         const sessionId = sessionRef.current
         if (!sessionId) throw new Error('Failed to create session')
 
+        const chatBody: Record<string, unknown> = { message: userText }
+        // Inject renderer's system prompt addendum if present
+        if (rendererAddendumRef.current) {
+          chatBody.systemPromptAddendum = rendererAddendumRef.current
+        }
+
         await streamSSE(
           `${BLINO_URL}/api/sessions/${sessionId}/chat`,
-          { message: userText },
+          chatBody,
           abortRef.current.signal,
         )
       } else {
@@ -1648,6 +1681,32 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* ── Custom Renderer (full-area iframe, replaces messages when active) ── */}
+      {rendererConfig && (
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <CustomRendererFrame
+            config={rendererConfig}
+            sessionId={activeSessionId}
+            model=""
+            frameRef={rendererFrameRef}
+            onSendMessage={(text, _ctx) => {
+              // Trigger a submit as if the user typed the message
+              handleSubmitRef.current(text)
+            }}
+            onUpdateSystemPrompt={(addendum) => {
+              rendererAddendumRef.current = addendum
+            }}
+            onPermissionResponse={(requestId, decision) => {
+              fetch(`${BLINO_URL}/api/permission/${requestId}/respond`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision }),
+              }).catch(() => {})
+            }}
+          />
+        </div>
+      )}
+
       {/* ── Messages ────────────────────────────────────────────────────────── */}
       <div
         style={{
@@ -1657,6 +1716,7 @@ export default function HomePage() {
           overflowX: 'hidden',
           marginRight: projectPanelOpen ? 380 : 0,
           transition: 'margin-right 0.2s ease',
+          display: rendererConfig ? 'none' : undefined,
         }}
       >
         <div
@@ -1737,6 +1797,7 @@ export default function HomePage() {
         borderTop: '0.5px solid var(--border-default)',
         padding: '14px 20px 16px',
         background: 'var(--bg-primary)',
+        display: rendererConfig?.inputMode === 'renderer' ? 'none' : undefined,
       }}>
         <div style={{ maxWidth: 760, margin: '0 auto', position: 'relative' }}>
           {showSlashMenu && (

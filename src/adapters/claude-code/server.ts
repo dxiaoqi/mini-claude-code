@@ -100,6 +100,18 @@ export async function createClaudeCodeServer(config: ClaudeCodeServerConfig) {
       return
     }
 
+    // ── GET /api/config ──
+    if (method === 'GET' && path === '/api/config') {
+      try {
+        const { loadProjectConfig } = await import('../../utils/config.js')
+        const projectConfig = await loadProjectConfig(config.cwd)
+        json(res, { renderer: projectConfig.renderer ?? null })
+      } catch {
+        json(res, { renderer: null })
+      }
+      return
+    }
+
     // ── POST /api/sessions ──
     if (method === 'POST' && path === '/api/sessions') {
       const body = await readBody(req) as { resumeSessionId?: string; systemPromptAddendum?: string }
